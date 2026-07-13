@@ -74,9 +74,7 @@ impl SessionStore {
 
     /// The path to the JSONL file for a session.
     fn session_path(&self, session_id: &str) -> PathBuf {
-        self.root
-            .join(session_id)
-            .with_extension("jsonl")
+        self.root.join(session_id).with_extension("jsonl")
     }
 
     /// Load all turns from a session. Returns an empty Vec if the file

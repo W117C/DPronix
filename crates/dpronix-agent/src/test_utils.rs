@@ -157,10 +157,7 @@ impl MockRunner {
 
 #[async_trait::async_trait]
 impl dpronix_core::Runner for MockRunner {
-    async fn run_stream(
-        &self,
-        _input: RunInput,
-    ) -> anyhow::Result<dpronix_core::RunEventStream> {
+    async fn run_stream(&self, _input: RunInput) -> anyhow::Result<dpronix_core::RunEventStream> {
         let events: Vec<anyhow::Result<dpronix_core::RunEvent>> =
             self.events.iter().map(|e| Ok(e.clone())).collect();
         Ok(Box::pin(tokio_stream::iter(events)))

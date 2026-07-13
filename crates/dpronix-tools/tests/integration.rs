@@ -49,7 +49,10 @@ async fn read_file_returns_content() {
     let tool = ReadFileTool;
 
     let result = tool
-        .execute(&ctx, &format!(r#"{{"path":"{}"}}"#, f.path().join("hello.txt").display()))
+        .execute(
+            &ctx,
+            &format!(r#"{{"path":"{}"}}"#, f.path().join("hello.txt").display()),
+        )
         .await
         .unwrap();
 
@@ -100,7 +103,10 @@ async fn write_and_read_roundtrips() {
         .execute(&ctx, &format!(r#"{{"path":"{}"}}"#, target.display()))
         .await
         .unwrap();
-    assert!(content.contains("hello disk"), "should contain file content");
+    assert!(
+        content.contains("hello disk"),
+        "should contain file content"
+    );
 }
 
 #[tokio::test]
@@ -113,10 +119,7 @@ async fn write_creates_parent_dirs() {
     let result = tool
         .execute(
             &ctx,
-            &format!(
-                r#"{{"path":"{}","content":"deep"}}"#,
-                target.display()
-            ),
+            &format!(r#"{{"path":"{}","content":"deep"}}"#, target.display()),
         )
         .await;
     assert!(result.is_ok());
@@ -228,7 +231,10 @@ async fn glob_matches_pattern() {
 #[tokio::test]
 async fn grep_finds_matches() {
     let f = Fixture::new();
-    let auth_path = f.write("auth.rs", "pub fn login() { /* TODO */ }\npub fn logout() {}\n");
+    let auth_path = f.write(
+        "auth.rs",
+        "pub fn login() { /* TODO */ }\npub fn logout() {}\n",
+    );
 
     let ctx = ToolContext::new("call-1");
     let tool = GrepTool;
@@ -237,10 +243,7 @@ async fn grep_finds_matches() {
     let result = tool
         .execute(
             &ctx,
-            &format!(
-                r#"{{"pattern":"TODO","path":"{}"}}"#,
-                auth_path.display()
-            ),
+            &format!(r#"{{"pattern":"TODO","path":"{}"}}"#, auth_path.display()),
         )
         .await
         .unwrap();
@@ -259,10 +262,7 @@ async fn grep_no_matches_returns_info() {
     let result = tool
         .execute(
             &ctx,
-            &format!(
-                r#"{{"pattern":"NONEXISTENT","path":"{}"}}"#,
-                path.display()
-            ),
+            &format!(r#"{{"pattern":"NONEXISTENT","path":"{}"}}"#, path.display()),
         )
         .await
         .unwrap();

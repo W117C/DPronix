@@ -1,3 +1,4 @@
+#![allow(dead_code, clippy::too_many_arguments, clippy::never_loop)]
 //! # dpronix-agent
 //!
 //! Agent implementations — the brains of dpronix. Each agent type implements
@@ -23,12 +24,12 @@
 //! using the provider, keeping the working set small.
 
 pub mod agent;
+pub mod budget;
 pub mod coordinator;
 pub mod memory;
 pub mod plan_mode;
 pub mod sub_agent;
 pub mod test_utils;
-pub mod budget;
 
 pub use agent::*;
 pub use coordinator::*;

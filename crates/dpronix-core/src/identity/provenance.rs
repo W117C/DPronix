@@ -36,7 +36,14 @@ impl ProvenanceDAG {
 
     /// Computes the cryptographic hash of the entire provenance graph topology.
     pub fn hash(&self) -> PromptHash {
-        let canonical_bytes = crate::identity::canonical::to_canonical_json(&self.nodes.values().map(|n| n.id.clone()).collect::<Vec<_>>()).unwrap_or_default();
+        let canonical_bytes = crate::identity::canonical::to_canonical_json(
+            &self
+                .nodes
+                .values()
+                .map(|n| n.id.clone())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap_or_default();
         DefaultHasher::hash(&canonical_bytes)
     }
 }

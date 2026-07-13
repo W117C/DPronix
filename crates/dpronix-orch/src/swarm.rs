@@ -69,8 +69,14 @@ impl SwarmCoordinator {
     }
 
     /// Decompose a goal into sub-tasks and assign to workers.
-    pub async fn orchestrate(&mut self, plan: &crate::types::Plan) -> anyhow::Result<Vec<SwarmTask>> {
-        let _queen = self.agents.values().find(|a| a.role == AgentRole::Queen)
+    pub async fn orchestrate(
+        &mut self,
+        plan: &crate::types::Plan,
+    ) -> anyhow::Result<Vec<SwarmTask>> {
+        let _queen = self
+            .agents
+            .values()
+            .find(|a| a.role == AgentRole::Queen)
             .ok_or_else(|| anyhow::anyhow!("no queen agent registered"))?;
 
         info!(plan_id = %plan.id, agents = self.agents.len(), "orchestrating swarm");
@@ -133,17 +139,18 @@ impl SwarmCoordinator {
         // Simple round-robin selection based on role
         let preferred_role = match action.name.as_str() {
             n if n.contains("test") || n.contains("review") => AgentRole::Reviewer,
-            n if n.contains("research") || n.contains("search") || n.contains("find") => AgentRole::Researcher,
+            n if n.contains("research") || n.contains("search") || n.contains("find") => {
+                AgentRole::Researcher
+            }
             _ => AgentRole::Worker,
         };
 
-        self.agents.values()
+        self.agents
+            .values()
             .find(|a| a.role == preferred_role)
             .or_else(|| self.agents.values().find(|a| a.role == AgentRole::Worker))
             .ok_or_else(|| anyhow::anyhow!("no suitable worker found for action: {}", action.name))
     }
-
-
 }
 
 #[derive(Debug, Clone)]

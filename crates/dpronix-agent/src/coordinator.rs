@@ -114,7 +114,9 @@ impl GoalContract {
         s.push_str("- `think` for reasoning (no side-effects)\n");
         s.push_str("- `call_read_tool` for read-only tool calls\n");
         s.push_str("- `delegate` for sub-agent dispatch\n");
-        s.push_str("NEVER use `call_tool` in the plan — only the executor may call mutating tools.\n");
+        s.push_str(
+            "NEVER use `call_tool` in the plan — only the executor may call mutating tools.\n",
+        );
         s
     }
 }
@@ -224,9 +226,15 @@ Rules:
 fn build_planning_prompt(goal: &str, read_only_tools: &[&dyn Tool]) -> Vec<Message> {
     let mut extra = String::new();
     if !read_only_tools.is_empty() {
-        extra.push_str("\n\nYou have access to these read-only tools for use in call_read_tool nodes:\n");
+        extra.push_str(
+            "\n\nYou have access to these read-only tools for use in call_read_tool nodes:\n",
+        );
         for t in read_only_tools {
-            extra.push_str(&format!("- {}: {}\n", t.schema().name, t.schema().description));
+            extra.push_str(&format!(
+                "- {}: {}\n",
+                t.schema().name,
+                t.schema().description
+            ));
         }
     }
 
@@ -253,12 +261,19 @@ fn build_planning_prompt(goal: &str, read_only_tools: &[&dyn Tool]) -> Vec<Messa
     ]
 }
 
-fn build_goal_planning_prompt(contract: &GoalContract, read_only_tools: &[&dyn Tool]) -> Vec<Message> {
+fn build_goal_planning_prompt(
+    contract: &GoalContract,
+    read_only_tools: &[&dyn Tool],
+) -> Vec<Message> {
     let mut extra = String::new();
     if !read_only_tools.is_empty() {
         extra.push_str("\n\nRead-only tools available for call_read_tool nodes:\n");
         for t in read_only_tools {
-            extra.push_str(&format!("- {}: {}\n", t.schema().name, t.schema().description));
+            extra.push_str(&format!(
+                "- {}: {}\n",
+                t.schema().name,
+                t.schema().description
+            ));
         }
     }
 
@@ -389,8 +404,7 @@ impl Runner for CoordinatorRunner {
             .iter()
             .map(|(k, v)| (k.clone(), Arc::clone(v)))
             .collect();
-        let read_only_refs: Vec<Arc<dyn Tool>> =
-            self.read_only_tools.values().cloned().collect();
+        let read_only_refs: Vec<Arc<dyn Tool>> = self.read_only_tools.values().cloned().collect();
         let max_nodes = self.max_graph_nodes;
         let sub_agent_runner = self.sub_agent_runner.clone();
         let goal_mode = self.goal_mode;
@@ -455,7 +469,10 @@ async fn run_coordinator(
             }
         };
         planner
-            .generate(&build_goal_planning_prompt(&contract, &read_only_views), &[])
+            .generate(
+                &build_goal_planning_prompt(&contract, &read_only_views),
+                &[],
+            )
             .await?
     } else {
         planner
@@ -495,9 +512,7 @@ async fn run_coordinator(
     let reflect: Arc<dyn ReflectCallback> = callbacks.clone();
     let delegate: Arc<dyn DelegateCallback> = callbacks;
 
-    let graph_executor = Arc::new(
-        GraphExecutor::new(think, tool, reflect).with_delegate(delegate),
-    );
+    let graph_executor = Arc::new(GraphExecutor::new(think, tool, reflect).with_delegate(delegate));
 
     let result = graph_executor.execute(&graph).await?;
 
@@ -547,10 +562,7 @@ async fn run_coordinator(
 /// tool is registered as read-only. This is the runtime enforcement of the
 /// planner / executor split.
 fn validate_plan_tool_boundary(graph: &ExecutionGraph, read_only: &[Arc<dyn Tool>]) {
-    let allowed: Vec<String> = read_only
-        .iter()
-        .map(|t| t.schema().name.clone())
-        .collect();
+    let allowed: Vec<String> = read_only.iter().map(|t| t.schema().name.clone()).collect();
     for (id, node) in &graph.nodes {
         let maybe_tool = match &node.action {
             Action::CallTool { tool, .. } => Some(tool.as_str()),
@@ -572,12 +584,7 @@ fn validate_plan_tool_boundary(graph: &ExecutionGraph, read_only: &[Arc<dyn Tool
 // Plan parsing — JSON → ExecutionGraph (with fallback)
 // ---------------------------------------------------------------------------
 
-fn parse_plan(
-    plan_text: &str,
-    goal: &str,
-    max_nodes: usize,
-    goal_mode: bool,
-) -> ExecutionGraph {
+fn parse_plan(plan_text: &str, goal: &str, max_nodes: usize, goal_mode: bool) -> ExecutionGraph {
     let json_str = extract_json_block(plan_text);
 
     match serde_json::from_str::<PlanOutput>(&json_str) {
@@ -600,10 +607,7 @@ fn parse_plan(
                             .clone()
                             .or_else(|| node.tool.clone())
                             .unwrap_or_default();
-                        let goal = node
-                            .goal
-                            .clone()
-                            .unwrap_or_else(|| node.prompt.clone());
+                        let goal = node.goal.clone().unwrap_or_else(|| node.prompt.clone());
                         Action::Delegate { sub_agent, goal }
                     }
                     _ => Action::Think {

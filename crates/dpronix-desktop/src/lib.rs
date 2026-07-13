@@ -63,7 +63,8 @@ pub fn run() {
             // Build system tray
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
+            let menu =
+                Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
 
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().unwrap())

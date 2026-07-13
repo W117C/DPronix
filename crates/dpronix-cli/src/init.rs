@@ -206,8 +206,7 @@ mod tests {
 
     #[test]
     fn load_commands_from_temp_dir() {
-        let dir = std::env::temp_dir()
-            .join(format!("dpronix-init-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("dpronix-init-test-{}", std::process::id()));
         let commands_dir = dir.join(".dpronix").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
 
@@ -231,8 +230,7 @@ mod tests {
 
     #[test]
     fn load_commands_empty_dir() {
-        let dir = std::env::temp_dir()
-            .join(format!("dpronix-init-empty-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("dpronix-init-empty-{}", std::process::id()));
         let commands_dir = dir.join(".dpronix").join("commands");
         std::fs::create_dir_all(&commands_dir).unwrap();
 

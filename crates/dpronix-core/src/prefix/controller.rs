@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use super::state::{PrefixState, EpochId};
 use super::epoch::EpochCommit;
-use super::transaction::{PrefixTransaction, MutationPlan};
+use super::state::{EpochId, PrefixState};
+use super::transaction::{MutationPlan, PrefixTransaction};
 
 /// The PrefixController is the core engine of the DPronix PIR (Prefix Identity Runtime).
 /// It ensures that Agent logic cannot directly manipulate the cognitive state (Prompt Hash)
@@ -11,7 +11,7 @@ pub trait PrefixController {
     /// Returns the current active PrefixState.
     fn current_state(&self) -> PrefixState;
 
-    /// Proposes a mutation to the Cognitive State. 
+    /// Proposes a mutation to the Cognitive State.
     /// This runs the `prepare` phase, computing expected cost and diffs.
     fn propose_mutation(&self, tx: PrefixTransaction) -> Result<MutationPlan>;
 
@@ -33,16 +33,16 @@ impl StandardPrefixController {
         let mut history = indexmap::IndexMap::new();
         // The genesis state doesn't have an epoch commit yet, or we can mock one
         let genesis_commit = EpochCommit::new(
-            initial_state.epoch, 
-            None, 
-            "System".into(), 
-            "Genesis".into(), 
-            "INITIALIZATION".into(), 
-            "+ Initialized Prefix State".into(), 
-            initial_state.prefix_root.clone()
+            initial_state.epoch,
+            None,
+            "System".into(),
+            "Genesis".into(),
+            "INITIALIZATION".into(),
+            "+ Initialized Prefix State".into(),
+            initial_state.prefix_root.clone(),
         );
         history.insert(initial_state.epoch, (initial_state.clone(), genesis_commit));
-        
+
         Self {
             current_state: initial_state,
             history,
@@ -62,7 +62,7 @@ impl PrefixController for StandardPrefixController {
     }
 
     fn commit(&self, plan: MutationPlan) -> Result<EpochCommit> {
-        let (new_state, commit) = super::transaction::commit_transaction(plan)?;
+        let (_new_state, commit) = super::transaction::commit_transaction(plan)?;
         // Store in history and set as active
         // This is safe to run since we own `self` behind a lock in real deployments
         // For trait purposes, assume interior mutability or single-threaded ownership.

@@ -95,8 +95,8 @@ pub mod factory {
                     cfg.timeout_secs,
                     cfg.max_retries,
                 )?
-                    .with_thinking(cfg.thinking_enabled)
-                    .with_extra_body(cfg.extra_body.clone());
+                .with_thinking(cfg.thinking_enabled)
+                .with_extra_body(cfg.extra_body.clone());
                 Ok(Box::new(provider))
             }
             "anthropic" => {
@@ -121,8 +121,8 @@ pub mod factory {
                     cfg.timeout_secs,
                     cfg.max_retries,
                 )?
-                    .with_thinking(cfg.thinking_enabled)
-                    .with_extra_body(cfg.extra_body.clone());
+                .with_thinking(cfg.thinking_enabled)
+                .with_extra_body(cfg.extra_body.clone());
                 Ok(Box::new(provider))
             }
             other => anyhow::bail!("unknown provider kind: {other}"),
