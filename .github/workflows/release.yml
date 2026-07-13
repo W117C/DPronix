@@ -59,16 +59,16 @@ jobs:
           cd target/${{ matrix.target }}/release
           mkdir -p /tmp/artifacts
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            7z a -tzip /tmp/artifacts/reasonix-${{ matrix.target }}.zip dpronix-cli.exe
+            7z a -tzip /tmp/artifacts/dpronix-cli-${{ matrix.target }}.zip dpronix-cli.exe
           else
-            tar czf /tmp/artifacts/reasonix-${{ matrix.target }}.tar.gz dpronix-cli
+            tar czf /tmp/artifacts/dpronix-cli-${{ matrix.target }}.tar.gz dpronix-cli
           fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: reasonix-${{ matrix.target }}
-          path: /tmp/artifacts/reasonix-${{ matrix.target }}.*
+          name: dpronix-cli-${{ matrix.target }}
+          path: /tmp/artifacts/dpronix-cli-${{ matrix.target }}.*
           if-no-files-found: error
 
   # ── Desktop Release (macOS + Linux) ─────────────────────────────
