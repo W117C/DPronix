@@ -1,5 +1,5 @@
 /**
- * bridge.ts — Tauri IPC bridge for DPRonix desktop frontend.
+ * bridge.ts — Tauri IPC bridge for DPronix desktop frontend.
  *
  * Inspired by DeepSeek-Reasonix desktop/frontend/src/lib/bridge.ts
  * but adapted from Wails (`window.go.main.App.*`) to Tauri (`invoke()`).

@@ -1,4 +1,4 @@
-# DPRonix — DeepSeek-V4 原生 AI 编码代理框架
+# DPronix — DeepSeek-V4 原生 AI 编码代理框架
 
 [![CI](https://github.com/user/dpronix-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/user/dpronix-rs/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
