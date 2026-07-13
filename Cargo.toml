@@ -22,6 +22,27 @@ members = [
     "crates/dpronix-orch",
 ]
 resolver = "2"
+default-members = [
+    "crates/dpronix-cli",
+    "crates/dpronix-config",
+    "crates/dpronix-provider",
+    "crates/dpronix-agent",
+    "crates/dpronix-tools",
+    "crates/dpronix-core",
+    "crates/dpronix-mcp",
+    "crates/dpronix-event",
+    "crates/dpronix-permission",
+    "crates/dpronix-context",
+    "crates/dpronix-runtime",
+    "crates/dpronix-sandbox",
+    "crates/dpronix-checkpoint",
+    "crates/dpronix-store",
+    "crates/dpronix-tui",
+    "crates/dpronix-serve",
+    "crates/dpronix-skills",
+    "crates/dpronix-telemetry",
+    "crates/dpronix-orch",
+]
 
 [workspace.lints.rust]
 rustdoc_broken_intra_doc_links = "deny"
