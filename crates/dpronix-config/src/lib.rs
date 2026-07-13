@@ -4,7 +4,7 @@
 //!   1. Hard-coded defaults
 //!   2. `~/.dpronix/config.toml`  (user)
 //!   3. `./dpronix.toml`          (project)
-//!   4. Environment variables       (REASONIX_*)
+//!   4. Environment variables       (DPRONIX_*)
 //!   5. CLI flags                   (applied by caller)
 
 use anyhow::Context;
@@ -416,12 +416,12 @@ impl Config {
         self.sandbox.merge(other.sandbox);
     }
 
-    /// Apply REASONIX_* environment variable overrides.
+    /// Apply DPRONIX_* environment variable overrides.
     fn apply_env_overrides(&mut self) {
-        if let Ok(val) = std::env::var("REASONIX_MODEL") {
+        if let Ok(val) = std::env::var("DPRONIX_MODEL") {
             self.default_model = Some(val);
         }
-        if let Ok(val) = std::env::var("REASONIX_MAX_STEPS") {
+        if let Ok(val) = std::env::var("DPRONIX_MAX_STEPS") {
             if let Ok(n) = val.parse() {
                 self.default_max_steps = Some(n);
             }

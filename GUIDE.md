@@ -102,7 +102,7 @@ Configuration is merged from multiple sources (last wins):
 1. **Built-in defaults**
 2. **User config**: `~/.config/dpronix/config.toml`
 3. **Project config**: `.dpronix/config.toml`
-4. **Environment variables**: `REASONIX_PROVIDER_MODEL`, `REASONIX_MAX_STEPS`, etc.
+4. **Environment variables**: `DPRONIX_PROVIDER_MODEL`, `DPRONIX_MAX_STEPS`, etc.
 
 ### Full Configuration Reference
 
@@ -143,10 +143,10 @@ servers = [
 |---|---|
 | `OPENAI_API_KEY` | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
-| `REASONIX_PROVIDER` | Override provider kind |
-| `REASONIX_MODEL` | Override model name |
-| `REASONIX_MAX_STEPS` | Override max steps |
-| `REASONIX_LOG` | Log level (trace, debug, info, warn, error) |
+| `DPRONIX_PROVIDER` | Override provider kind |
+| `DPRONIX_MODEL` | Override model name |
+| `DPRONIX_MAX_STEPS` | Override max steps |
+| `DPRONIX_LOG` | Log level (trace, debug, info, warn, error) |
 
 ## Tools Reference
 

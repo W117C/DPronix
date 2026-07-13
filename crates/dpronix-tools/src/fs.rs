@@ -369,7 +369,8 @@ impl Tool for MoveFileTool {
 // Path sanitization
 // ---------------------------------------------------------------------------
 
-/// Basic path sanitization: reject obviously malicious paths.
+/// Basic path sanitization: reject obviously malicious paths
+/// and ensure the path stays within the workspace root.
 fn sanitize_path(raw: &str) -> anyhow::Result<PathBuf> {
     let path = Path::new(raw);
 
@@ -392,6 +393,14 @@ fn sanitize_path(raw: &str) -> anyhow::Result<PathBuf> {
     } else {
         resolved.components().collect::<PathBuf>()
     };
+
+    // Security: block explicit path traversal via '..' that escapes workspace
+    if raw.contains("..") {
+        let cwd = std::env::current_dir()?;
+        if !canonical.starts_with(&cwd) {
+            anyhow::bail!("path escapes workspace root via '..': {}", raw);
+        }
+    }
 
     Ok(canonical)
 }

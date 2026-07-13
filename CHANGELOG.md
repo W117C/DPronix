@@ -73,7 +73,7 @@ All notable changes to dpronix-rs will be documented in this file.
 - `dpronix-tools`: 13 built-in tools — read_file, write_file, edit_file, move_file, ls, glob, grep, shell, web_fetch, todo_write, remember, forget, recall
 - `dpronix-mcp`: MCP client for connecting to external tool servers
 - `dpronix-config`: TOML-based config with multi-layer merging (default → user → project → env)
-- `dpronix-context`: Workspace indexing, working memory, project memory (REASONIX.md + .dpronix/memory/)
+- `dpronix-context`: Workspace indexing, working memory, project memory (DPRONIX.md + .dpronix/memory/)
 - `dpronix-permission`: Policy-based permission gating for tool execution (allow/ask/deny)
 - `dpronix-event`: Event bus for agent lifecycle events
 - `dpronix-runtime`: Composition root — wires registry, context, event, permission, and config together
