@@ -1,14 +1,13 @@
 use async_trait::async_trait;
-use crate::snippet;
 use dpronix_checkpoint::CheckpointManager;
 use dpronix_core::{Tool, ToolContext, ToolSchema};
 use serde::Deserialize;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::Mutex;
 
 // ---------------------------------------------------------------------------
 // ReadFileTool
@@ -67,8 +66,12 @@ impl Tool for ReadFileTool {
         drop(tracker);
 
         // Return content with snippet marker for edit validation
-        Ok(format!("{}\n\n[SNIPPED ID: {}]\n[Snippet generated from: {}]\n",
-            content.trim_end(), snippet_id, path.display()))
+        Ok(format!(
+            "{}\n\n[SNIPPED ID: {}]\n[Snippet generated from: {}]\n",
+            content.trim_end(),
+            snippet_id,
+            path.display()
+        ))
     }
 }
 
@@ -80,7 +83,6 @@ impl Tool for ReadFileTool {
 pub struct WriteFileTool {
     checkpointer: Option<Arc<Mutex<CheckpointManager>>>,
 }
-
 
 impl WriteFileTool {
     pub fn new() -> Self {
@@ -170,7 +172,6 @@ impl Tool for WriteFileTool {
 pub struct EditFileTool {
     checkpointer: Option<Arc<Mutex<CheckpointManager>>>,
 }
-
 
 impl EditFileTool {
     pub fn new() -> Self {
@@ -291,7 +292,6 @@ impl Tool for EditFileTool {
 pub struct MoveFileTool {
     checkpointer: Option<Arc<Mutex<CheckpointManager>>>,
 }
-
 
 impl MoveFileTool {
     pub fn new() -> Self {

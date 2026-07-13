@@ -20,11 +20,10 @@
 //! - Cache-aware storage format for fast retrieval
 //! - Session-level memory compaction
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tracing::info;
 
 // ---------------------------------------------------------------------------
@@ -168,7 +167,7 @@ impl InMemoryVectorStore {
         // Simple character n-gram hashing to produce a pseudo-embedding
         let chars: Vec<char> = text.chars().collect();
         for window in chars.windows(3) {
-            let hash = self::hash_chars(&window);
+            let hash = self::hash_chars(window);
             let idx = (hash as usize) % dim;
             embedding[idx] += 1.0;
         }
@@ -222,7 +221,10 @@ impl VectorStore for InMemoryVectorStore {
 
         if self.records.len() >= self.config.max_records {
             // Remove lowest-importance record
-            if let Some(min_idx) = self.records.iter().enumerate()
+            if let Some(min_idx) = self
+                .records
+                .iter()
+                .enumerate()
                 .min_by(|(_, a), (_, b)| a.importance.partial_cmp(&b.importance).unwrap())
                 .map(|(idx, _)| idx)
             {
@@ -240,7 +242,9 @@ impl VectorStore for InMemoryVectorStore {
     }
 
     fn search(&self, query_embedding: &[f32], top_k: usize) -> Vec<SearchResult> {
-        let mut results: Vec<SearchResult> = self.records.iter()
+        let mut results: Vec<SearchResult> = self
+            .records
+            .iter()
             .map(|record| {
                 let score = cosine_similarity(query_embedding, &record.embedding);
                 SearchResult {
@@ -252,7 +256,11 @@ impl VectorStore for InMemoryVectorStore {
             .collect();
 
         // Sort by score descending
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(top_k);
         results
     }
@@ -303,6 +311,7 @@ impl VectorStore for InMemoryVectorStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
 
     fn make_record(id: &str, content: &str) -> MemoryRecord {
         MemoryRecord {
@@ -334,7 +343,10 @@ mod tests {
 
         let results = store.search_by_text("hello", 5);
         assert!(!results.is_empty(), "should find similar texts");
-        assert_eq!(results[0].record.id, "1", "most similar should be 'hello world'");
+        assert_eq!(
+            results[0].record.id, "1",
+            "most similar should be 'hello world'"
+        );
     }
 
     #[test]

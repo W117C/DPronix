@@ -628,13 +628,11 @@ mod tests {
 
     #[test]
     fn prompt_builder_injects_tools() {
-        let tools = vec![
-            ToolSchema {
-                name: "grep".into(),
-                description: "search files".into(),
-                parameters: serde_json::json!({}),
-            },
-        ];
+        let tools = vec![ToolSchema {
+            name: "grep".into(),
+            description: "search files".into(),
+            parameters: serde_json::json!({}),
+        }];
         let messages = PromptBuilder::build(
             "You are helpful.",
             &tools,
@@ -651,12 +649,7 @@ mod tests {
         let mut pm = ProjectMemory::new();
         pm.dpronix_md = Some("This is a Rust project.".into());
 
-        let messages = PromptBuilder::build(
-            "You are helpful.",
-            &[],
-            &WorkingMemory::new(),
-            &pm,
-        );
+        let messages = PromptBuilder::build("You are helpful.", &[], &WorkingMemory::new(), &pm);
         assert!(messages[0].content.contains("## Project Context"));
         assert!(messages[0].content.contains("Rust project"));
     }
@@ -674,12 +667,7 @@ mod tests {
         });
         wm.compaction_digest = Some("summary of earlier conversation".into());
 
-        let messages = PromptBuilder::build(
-            "system",
-            &[],
-            &wm,
-            &ProjectMemory::new(),
-        );
+        let messages = PromptBuilder::build("system", &[], &wm, &ProjectMemory::new());
         // system msg + digest + conversation (1 user msg)
         assert_eq!(messages.len(), 3);
         assert!(messages[1].content.contains("conversation-summary"));
@@ -691,12 +679,7 @@ mod tests {
         wm.compaction_digest = Some("summary".into());
         // No conversation messages -> no digest injection
 
-        let messages = PromptBuilder::build(
-            "system",
-            &[],
-            &wm,
-            &ProjectMemory::new(),
-        );
+        let messages = PromptBuilder::build("system", &[], &wm, &ProjectMemory::new());
         // Only the system message, no digest inserted
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role, Role::System);
@@ -706,8 +689,7 @@ mod tests {
 
     #[test]
     fn workspace_scan_temp_dir() {
-        let dir = std::env::temp_dir()
-            .join(format!("dpronix-ctx-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("dpronix-ctx-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         // Create a test file
@@ -720,7 +702,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
 
         assert_eq!(ws.root, dir);
-        let paths: Vec<&str> = ws.file_tree.entries.iter()
+        let paths: Vec<&str> = ws
+            .file_tree
+            .entries
+            .iter()
             .filter(|e| !e.is_dir)
             .map(|e| e.path.to_str().unwrap())
             .collect();
@@ -730,8 +715,7 @@ mod tests {
 
     #[test]
     fn workspace_scan_respects_gitignore() {
-        let dir = std::env::temp_dir()
-            .join(format!("dpronix-ctx-gi-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("dpronix-ctx-gi-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
 
         std::fs::write(dir.join(".gitignore"), "*.log\ntarget/\n").unwrap();
@@ -743,7 +727,10 @@ mod tests {
         let ws = WorkspaceIndex::scan(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
 
-        let file_paths: Vec<&str> = ws.file_tree.entries.iter()
+        let file_paths: Vec<&str> = ws
+            .file_tree
+            .entries
+            .iter()
             .filter(|e| !e.is_dir)
             .map(|e| e.path.to_str().unwrap())
             .collect();

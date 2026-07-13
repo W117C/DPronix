@@ -44,12 +44,15 @@ impl SnippetTracker {
         let id = format!("snip_{}", &hash[..12]);
 
         // If this path already has a snippet, update it
-        self.snippets.insert(id.clone(), Snippet {
-            id: id.clone(),
-            path: path.to_string(),
-            content_hash: hash,
-            content_preview: content.chars().take(100).collect(),
-        });
+        self.snippets.insert(
+            id.clone(),
+            Snippet {
+                id: id.clone(),
+                path: path.to_string(),
+                content_hash: hash,
+                content_preview: content.chars().take(100).collect(),
+            },
+        );
         self.path_to_id.insert(path.to_string(), id.clone());
         info!(path, snippet = %id, "snippet registered");
         id
@@ -58,7 +61,9 @@ impl SnippetTracker {
     /// Validate that a snippet is still current for its file.
     /// Returns `Ok(())` if valid, `Err(current_content)` if stale.
     pub fn validate(&self, snippet_id: &str, current_content: &str) -> Result<(), String> {
-        let snippet = self.snippets.get(snippet_id)
+        let snippet = self
+            .snippets
+            .get(snippet_id)
             .ok_or_else(|| "unknown snippet".to_string())?;
 
         let current_hash = hash_content(current_content);

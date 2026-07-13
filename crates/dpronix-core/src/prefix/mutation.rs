@@ -9,7 +9,7 @@ pub enum MutationType {
 
 pub enum MutationDecision {
     Allow,
-    Recover(PrefixState),
+    Recover(Box<PrefixState>),
     RequireEpoch,
     Reject(String),
 }

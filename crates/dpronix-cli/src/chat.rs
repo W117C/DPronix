@@ -217,22 +217,20 @@ async fn handle_slash_command(
         }
 
         // ── Display mode ──────────────────────────────────────
-        "raw" => {
-            match mode {
-                DisplayMode::Normal => {
-                    *mode = DisplayMode::Lite;
-                    println!("display mode: lite (hiding reasoning content)");
-                }
-                DisplayMode::Lite => {
-                    *mode = DisplayMode::Raw;
-                    println!("display mode: raw (showing chunk types)");
-                }
-                DisplayMode::Raw => {
-                    *mode = DisplayMode::Normal;
-                    println!("display mode: normal");
-                }
+        "raw" => match mode {
+            DisplayMode::Normal => {
+                *mode = DisplayMode::Lite;
+                println!("display mode: lite (hiding reasoning content)");
             }
-        }
+            DisplayMode::Lite => {
+                *mode = DisplayMode::Raw;
+                println!("display mode: raw (showing chunk types)");
+            }
+            DisplayMode::Raw => {
+                *mode = DisplayMode::Normal;
+                println!("display mode: normal");
+            }
+        },
 
         // ── Model info ────────────────────────────────────────
         "model" => {
@@ -248,10 +246,7 @@ async fn handle_slash_command(
         // ── Skills ────────────────────────────────────────────
         "skills" => {
             // Try to load skills from standard paths
-            let paths = [
-                ".dpronix/skills",
-                ".agents/skills",
-            ];
+            let paths = [".dpronix/skills", ".agents/skills"];
             let mut found = false;
             for path_str in &paths {
                 let loader = dpronix_skills::SkillLoader::new(path_str);

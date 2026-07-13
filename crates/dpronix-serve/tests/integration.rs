@@ -52,62 +52,76 @@ async fn start_server() -> u16 {
     tokio::spawn(async move {
         let _cors = tower_http::cors::CorsLayer::permissive();
         let app = axum::Router::new()
-            .route("/health", axum::routing::get(
-                || async { axum::Json(serde_json::json!({"status":"ok"})) },
-            ))
-            .route("/v1/chat", axum::routing::post(
-                |axum::extract::State(state): axum::extract::State<Arc<Server>>,
-                 axum::Json(req): axum::Json<ChatRequest>| async move {
-                    let input = dpronix_core::runner::RunInput {
-                        prompt: req.prompt,
-                        images: req.images.unwrap_or_default(),
-                        model_override: req.model,
-                    };
-                    // Validate
-                    if input.prompt.trim().is_empty() {
-                        let e = axum::response::sse::Event::default()
-                            .event("error")
-                            .data("prompt must not be empty");
-                        let (tx, rx): (futures::channel::mpsc::UnboundedSender<Result<axum::response::sse::Event, Infallible>>, _) =
-                            futures::channel::mpsc::unbounded();
-                        let _ = tx.unbounded_send(Ok(e));
-                        return axum::response::sse::Sse::new(rx);
-                    }
-                    if input.prompt.len() > 32_000 {
-                        let e = axum::response::sse::Event::default().event("error").data(
-                            format!("prompt exceeds max length ({} chars)", 32_000),
-                        );
-                        let (tx, rx): (futures::channel::mpsc::UnboundedSender<Result<axum::response::sse::Event, Infallible>>, _) =
-                            futures::channel::mpsc::unbounded();
-                        let _ = tx.unbounded_send(Ok(e));
-                        return axum::response::sse::Sse::new(rx);
-                    }
-
-                    let (tx, rx) = futures::channel::mpsc::unbounded();
-                    let runner = state.runner.clone();
-                    tokio::spawn(async move {
-                        let mut stream = runner.run_stream(input).await.unwrap();
-                        while let Some(event) = stream.next().await {
-                            let sse_event = match event.unwrap() {
-                                RunEvent::TextDelta(text) => {
-                                    Ok(axum::response::sse::Event::default().event("text").data(text))
-                                }
-                                RunEvent::Usage(u) => Ok(axum::response::sse::Event::default()
-                                    .event("usage")
-                                    .data(serde_json::to_string(&u).unwrap_or_default())),
-                                RunEvent::Done(o) => Ok(axum::response::sse::Event::default()
-                                    .event("done")
-                                    .data(serde_json::json!({"text":o.text}).to_string())),
-                                _ => continue,
-                            };
-                            if tx.unbounded_send(sse_event).is_err() {
-                                break;
-                            }
+            .route(
+                "/health",
+                axum::routing::get(|| async { axum::Json(serde_json::json!({"status":"ok"})) }),
+            )
+            .route(
+                "/v1/chat",
+                axum::routing::post(
+                    |axum::extract::State(state): axum::extract::State<Arc<Server>>,
+                     axum::Json(req): axum::Json<ChatRequest>| async move {
+                        let input = dpronix_core::runner::RunInput {
+                            prompt: req.prompt,
+                            images: req.images.unwrap_or_default(),
+                            model_override: req.model,
+                        };
+                        // Validate
+                        if input.prompt.trim().is_empty() {
+                            let e = axum::response::sse::Event::default()
+                                .event("error")
+                                .data("prompt must not be empty");
+                            let (tx, rx): (
+                                futures::channel::mpsc::UnboundedSender<
+                                    Result<axum::response::sse::Event, Infallible>,
+                                >,
+                                _,
+                            ) = futures::channel::mpsc::unbounded();
+                            let _ = tx.unbounded_send(Ok(e));
+                            return axum::response::sse::Sse::new(rx);
                         }
-                    });
-                    axum::response::sse::Sse::new(rx)
-                },
-            ))
+                        if input.prompt.len() > 32_000 {
+                            let e = axum::response::sse::Event::default()
+                                .event("error")
+                                .data(format!("prompt exceeds max length ({} chars)", 32_000));
+                            let (tx, rx): (
+                                futures::channel::mpsc::UnboundedSender<
+                                    Result<axum::response::sse::Event, Infallible>,
+                                >,
+                                _,
+                            ) = futures::channel::mpsc::unbounded();
+                            let _ = tx.unbounded_send(Ok(e));
+                            return axum::response::sse::Sse::new(rx);
+                        }
+
+                        let (tx, rx) = futures::channel::mpsc::unbounded();
+                        let runner = state.runner.clone();
+                        tokio::spawn(async move {
+                            let mut stream = runner.run_stream(input).await.unwrap();
+                            while let Some(event) = stream.next().await {
+                                let sse_event = match event.unwrap() {
+                                    RunEvent::TextDelta(text) => {
+                                        Ok(axum::response::sse::Event::default()
+                                            .event("text")
+                                            .data(text))
+                                    }
+                                    RunEvent::Usage(u) => Ok(axum::response::sse::Event::default()
+                                        .event("usage")
+                                        .data(serde_json::to_string(&u).unwrap_or_default())),
+                                    RunEvent::Done(o) => Ok(axum::response::sse::Event::default()
+                                        .event("done")
+                                        .data(serde_json::json!({"text":o.text}).to_string())),
+                                    _ => continue,
+                                };
+                                if tx.unbounded_send(sse_event).is_err() {
+                                    break;
+                                }
+                            }
+                        });
+                        axum::response::sse::Sse::new(rx)
+                    },
+                ),
+            )
             .with_state(Arc::new(server));
         axum::serve(listener, app).await.unwrap();
     });
@@ -127,7 +141,7 @@ async fn health_endpoint_returns_ok() {
     let resp = reqwest::get(format!("http://127.0.0.1:{port}/health"))
         .await
         .unwrap();
-    assert!(resp.status().is_success());
+    assert_eq!(resp.status(), reqwest::StatusCode::OK, "health failed: {:?}", resp.text().await.unwrap());
     let body: Value = resp.json().await.unwrap();
     assert_eq!(body["status"], "ok");
 }

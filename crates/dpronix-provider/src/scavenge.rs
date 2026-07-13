@@ -7,6 +7,12 @@ pub struct ScavengeStateMachine {
     buffer: String,
 }
 
+impl Default for ScavengeStateMachine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScavengeStateMachine {
     pub fn new() -> Self {
         Self {
@@ -47,7 +53,7 @@ impl ScavengeStateMachine {
                     if self.brace_count > 0 {
                         self.brace_count -= 1;
                         self.buffer.push(c);
-                        
+
                         if self.brace_count == 0 {
                             // Attempt to parse completed buffer
                             let parsed: Option<Value> = serde_json::from_str(&self.buffer).ok();

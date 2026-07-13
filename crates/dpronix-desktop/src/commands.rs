@@ -25,12 +25,30 @@ use crate::AppState;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WireEvent {
-    TextDelta { text: String },
-    ReasoningDelta { text: String, signature: Option<String> },
-    ToolCallStart { id: String, name: String },
-    ToolCallDelta { id: String, args_delta: String },
-    ToolCallEnd { id: String, name: String, arguments: String },
-    ToolResult { call_id: String, result: String },
+    TextDelta {
+        text: String,
+    },
+    ReasoningDelta {
+        text: String,
+        signature: Option<String>,
+    },
+    ToolCallStart {
+        id: String,
+        name: String,
+    },
+    ToolCallDelta {
+        id: String,
+        args_delta: String,
+    },
+    ToolCallEnd {
+        id: String,
+        name: String,
+        arguments: String,
+    },
+    ToolResult {
+        call_id: String,
+        result: String,
+    },
     Usage {
         prompt_tokens: u32,
         completion_tokens: u32,
@@ -45,7 +63,9 @@ pub enum WireEvent {
         text: String,
         usage: Option<UsageInfo>,
     },
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,8 +185,16 @@ pub async fn submit_prompt(
                         Ok(RunEvent::ToolCallDelta { id, args_delta }) => {
                             let _ = on_event.send(WireEvent::ToolCallDelta { id, args_delta });
                         }
-                        Ok(RunEvent::ToolCallEnd { id, name, arguments }) => {
-                            let _ = on_event.send(WireEvent::ToolCallEnd { id, name, arguments });
+                        Ok(RunEvent::ToolCallEnd {
+                            id,
+                            name,
+                            arguments,
+                        }) => {
+                            let _ = on_event.send(WireEvent::ToolCallEnd {
+                                id,
+                                name,
+                                arguments,
+                            });
                         }
                         Ok(RunEvent::ToolResult { call_id, result }) => {
                             let _ = on_event.send(WireEvent::ToolResult { call_id, result });
@@ -198,12 +226,27 @@ pub async fn submit_prompt(
                         Ok(RunEvent::Done(output)) => {
                             let usage_info = UsageInfo {
                                 prompt_tokens: output.usage.as_ref().map_or(0, |u| u.prompt_tokens),
-                                completion_tokens: output.usage.as_ref().map_or(0, |u| u.completion_tokens),
+                                completion_tokens: output
+                                    .usage
+                                    .as_ref()
+                                    .map_or(0, |u| u.completion_tokens),
                                 total_tokens: output.usage.as_ref().map_or(0, |u| u.total_tokens),
-                                cache_hit_tokens: output.usage.as_ref().map_or(0, |u| u.cache_hit_tokens),
-                                cache_miss_tokens: output.usage.as_ref().map_or(0, |u| u.cache_miss_tokens),
-                                session_cache_hit_tokens: output.usage.as_ref().map_or(0, |u| u.cache_hit_tokens),
-                                session_cache_miss_tokens: output.usage.as_ref().map_or(0, |u| u.cache_miss_tokens),
+                                cache_hit_tokens: output
+                                    .usage
+                                    .as_ref()
+                                    .map_or(0, |u| u.cache_hit_tokens),
+                                cache_miss_tokens: output
+                                    .usage
+                                    .as_ref()
+                                    .map_or(0, |u| u.cache_miss_tokens),
+                                session_cache_hit_tokens: output
+                                    .usage
+                                    .as_ref()
+                                    .map_or(0, |u| u.cache_hit_tokens),
+                                session_cache_miss_tokens: output
+                                    .usage
+                                    .as_ref()
+                                    .map_or(0, |u| u.cache_miss_tokens),
                             };
                             let _ = on_event.send(WireEvent::Done {
                                 text: output.text,

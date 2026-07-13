@@ -31,7 +31,7 @@ impl PrefixHealthMonitor {
         let mut penalty = 0.0;
 
         for event in &self.mutations {
-            let dt = (now - event.timestamp).num_minutes() as f64; 
+            let dt = (now - event.timestamp).num_minutes() as f64;
             // In an agent loop, dt could also be represented in "turns" rather than time.
             let decayed_cost = event.cost * (-self.decay_lambda * dt.max(0.0)).exp();
             penalty += decayed_cost;

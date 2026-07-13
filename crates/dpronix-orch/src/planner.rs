@@ -21,7 +21,6 @@
 
 use crate::types::*;
 use dpronix_core::runner::{RunEvent, RunInput, Runner};
-use dpronix_core::{Message, Role};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio_stream::StreamExt;
@@ -75,7 +74,6 @@ impl GoalPlanner {
         info!(description = %goal.description, "planning goal");
 
         let plan_prompt = self.build_plan_prompt(&goal);
-        
 
         // Use a dedicated planning agent with thinking mode
         let input = RunInput {
@@ -116,7 +114,10 @@ impl GoalPlanner {
             let ready = self.ready_actions(plan, &completed);
             if ready.is_empty() {
                 // No actions can proceed — check for circular dependency or all blocked
-                let all_blocked = plan.actions.iter().all(|a| matches!(a.status, ActionStatus::Blocked(_)));
+                let all_blocked = plan
+                    .actions
+                    .iter()
+                    .all(|a| matches!(a.status, ActionStatus::Blocked(_)));
                 if all_blocked {
                     plan.status = PlanStatus::Failed("all actions blocked".to_string());
                     return Err(anyhow::anyhow!("all actions blocked, cannot make progress"));
@@ -276,11 +277,22 @@ Constraints:
                     } else if let Some(del) = line.strip_prefix("delegatable:") {
                         action.delegatable = del.trim() == "true";
                     } else if let Some(preconds) = line.strip_prefix("preconditions:") {
-                        let stripped = preconds.trim().trim_start_matches('[').trim_end_matches(']');
-                        action.preconditions = stripped.split(',').map(|s| s.trim().trim_matches('"').to_string()).filter(|s| !s.is_empty()).collect();
+                        let stripped = preconds
+                            .trim()
+                            .trim_start_matches('[')
+                            .trim_end_matches(']');
+                        action.preconditions = stripped
+                            .split(',')
+                            .map(|s| s.trim().trim_matches('"').to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect();
                     } else if let Some(effs) = line.strip_prefix("effects:") {
                         let stripped = effs.trim().trim_start_matches('[').trim_end_matches(']');
-                        action.effects = stripped.split(',').map(|s| s.trim().trim_matches('"').to_string()).filter(|s| !s.is_empty()).collect();
+                        action.effects = stripped
+                            .split(',')
+                            .map(|s| s.trim().trim_matches('"').to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect();
                     }
                 }
             }
@@ -351,13 +363,17 @@ Constraints:
             if completed.contains(&action.id) {
                 continue;
             }
-            if matches!(action.status, ActionStatus::InProgress | ActionStatus::Completed) {
+            if matches!(
+                action.status,
+                ActionStatus::InProgress | ActionStatus::Completed
+            ) {
                 continue;
             }
 
             // Check if all dependencies are completed
             let deps = plan.dependencies.get(&action.id);
-            let all_deps_done = deps.map_or(true, |deps| deps.iter().all(|d| completed.contains(d)));
+            let all_deps_done =
+                deps.is_none_or(|deps| deps.iter().all(|d| completed.contains(d)));
             if all_deps_done {
                 ready.push(action);
             }

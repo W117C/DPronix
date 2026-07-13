@@ -6,7 +6,6 @@ use dpronix_core::{Message, Role, RunEvent, RunEventStream, RunInput, RunOutput,
 use dpronix_provider::Provider;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::signal;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
@@ -140,7 +139,6 @@ async fn run_agent_loop(
     tx: &mpsc::Sender<anyhow::Result<RunEvent>>,
     cancel: &CancellationToken,
 ) -> anyhow::Result<()> {
-
     // Add user prompt
     memory.add_message(Message {
         role: Role::User,
@@ -194,15 +192,8 @@ async fn run_agent_loop(
             .collect();
 
         // Stream from provider
-        let step_result = stream_and_process_turn(
-            &provider,
-            &tools,
-            &tool_map,
-            memory,
-            tx,
-            cancel,
-        )
-        .await?;
+        let step_result =
+            stream_and_process_turn(&provider, &tools, &tool_map, memory, tx, cancel).await?;
 
         match step_result {
             StepOutcome::Complete(output) => {
@@ -287,9 +278,7 @@ async fn stream_and_process_turn(
                     name: name.clone(),
                     arguments: String::new(),
                 });
-                tx.send(Ok(RunEvent::ToolCallStart { id, name }))
-                    .await
-                    .ok();
+                tx.send(Ok(RunEvent::ToolCallStart { id, name })).await.ok();
             }
             Chunk::ToolCallDelta { id, args_delta } => {
                 // Accumulate arguments into the matching pending call
@@ -300,7 +289,11 @@ async fn stream_and_process_turn(
                     .await
                     .ok();
             }
-            Chunk::ToolCallEnd { id, name, arguments } => {
+            Chunk::ToolCallEnd {
+                id,
+                name,
+                arguments,
+            } => {
                 // If we already accumulated from deltas, merge; otherwise use the complete args
                 if let Some(call) = pending_calls.iter_mut().find(|c| c.id == id) {
                     if !arguments.is_empty() && call.arguments.is_empty() {
@@ -313,9 +306,13 @@ async fn stream_and_process_turn(
                         arguments: arguments.clone(),
                     });
                 }
-                tx.send(Ok(RunEvent::ToolCallEnd { id, name, arguments }))
-                    .await
-                    .ok();
+                tx.send(Ok(RunEvent::ToolCallEnd {
+                    id,
+                    name,
+                    arguments,
+                }))
+                .await
+                .ok();
             }
             Chunk::Usage(u) => {
                 tx.send(Ok(RunEvent::Usage(u.clone()))).await.ok();
@@ -403,7 +400,11 @@ async fn stream_and_process_turn(
                         let max_len = 500;
                         let truncated = if err_str.len() > max_len {
                             let end = err_str.floor_char_boundary(max_len);
-                            format!("{}... [truncated {} bytes]", &err_str[..end], err_str.len() - end)
+                            format!(
+                                "{}... [truncated {} bytes]",
+                                &err_str[..end],
+                                err_str.len() - end
+                            )
                         } else {
                             err_str
                         };
@@ -659,8 +660,7 @@ mod tests {
     #[tokio::test]
     async fn agent_system_prompt_injected() {
         let provider = Arc::new(MockProvider::text("got prompt"));
-        let agent = Agent::new(provider, 3)
-            .with_system_prompt("you are a test bot");
+        let agent = Agent::new(provider, 3).with_system_prompt("you are a test bot");
 
         let input = RunInput {
             prompt: "who are you".into(),
@@ -669,14 +669,16 @@ mod tests {
         };
 
         let result = agent.run_stream(input).await;
-        assert!(result.is_ok(), "agent with system prompt should run without error");
+        assert!(
+            result.is_ok(),
+            "agent with system prompt should run without error"
+        );
     }
 
     #[tokio::test]
     async fn agent_compaction_threshold_triggers() {
         let provider = Arc::new(MockProvider::text("compacted"));
-        let agent = Agent::new(provider, 3)
-            .with_compaction_threshold(Some(1));
+        let agent = Agent::new(provider, 3).with_compaction_threshold(Some(1));
 
         let input = RunInput {
             prompt: "a really long message that should trigger compaction".into(),
@@ -736,9 +738,14 @@ mod tests {
         }
 
         // Should see ToolResult and eventually Done
-        let has_tool_result = events.iter().any(|e| matches!(e, RunEvent::ToolResult { .. }));
+        let has_tool_result = events
+            .iter()
+            .any(|e| matches!(e, RunEvent::ToolResult { .. }));
         let has_done = events.iter().any(|e| matches!(e, RunEvent::Done(_)));
-        assert!(has_tool_result, "agent should execute tools and emit ToolResult");
+        assert!(
+            has_tool_result,
+            "agent should execute tools and emit ToolResult"
+        );
         assert!(has_done, "agent should eventually complete with Done");
     }
 }

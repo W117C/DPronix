@@ -135,7 +135,8 @@ impl Memory {
             }
 
             if msg.content.len() > threshold_chars {
-                self.full_results.insert(call_id.clone(), msg.content.clone());
+                self.full_results
+                    .insert(call_id.clone(), msg.content.clone());
 
                 let head_len = (threshold_chars as f32 * TRUNCATION_HEAD_RATIO) as usize;
                 let tail_len = threshold_chars - head_len;

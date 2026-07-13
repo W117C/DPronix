@@ -73,16 +73,18 @@ async fn chat(
 ) -> Sse<impl futures_core::Stream<Item = Result<Event, Infallible>>> {
     // Validate prompt
     if req.prompt.trim().is_empty() {
-        let error_event = Event::default().event("error").data("prompt must not be empty");
+        let error_event = Event::default()
+            .event("error")
+            .data("prompt must not be empty");
         let (tx, rx) = futures::channel::mpsc::unbounded();
         let _ = tx.unbounded_send(Ok(error_event));
         return Sse::new(rx);
     }
     const MAX_PROMPT_LEN: usize = 32_000;
     if req.prompt.len() > MAX_PROMPT_LEN {
-        let error_event = Event::default()
-            .event("error")
-            .data(format!("prompt exceeds max length ({MAX_PROMPT_LEN} chars)"));
+        let error_event = Event::default().event("error").data(format!(
+            "prompt exceeds max length ({MAX_PROMPT_LEN} chars)"
+        ));
         let (tx, rx) = futures::channel::mpsc::unbounded();
         let _ = tx.unbounded_send(Ok(error_event));
         return Sse::new(rx);
@@ -110,9 +112,7 @@ async fn chat(
                         }
                         Ok(RunEvent::ToolCallStart { id, name }) => Ok(Event::default()
                             .event("tool_start")
-                            .data(
-                                serde_json::json!({ "id": id, "name": name }).to_string(),
-                            )),
+                            .data(serde_json::json!({ "id": id, "name": name }).to_string())),
                         Ok(RunEvent::ToolCallEnd {
                             id,
                             name,
@@ -121,15 +121,15 @@ async fn chat(
                             serde_json::json!({ "id": id, "name": name, "arguments": arguments })
                                 .to_string(),
                         )),
-                        Ok(RunEvent::ToolResult { call_id, result }) => Ok(Event::default()
-                            .event("tool_result")
-                            .data(
+                        Ok(RunEvent::ToolResult { call_id, result }) => {
+                            Ok(Event::default().event("tool_result").data(
                                 serde_json::json!({ "call_id": call_id, "result": result })
                                     .to_string(),
-                            )),
-                        Ok(RunEvent::Usage(u)) => Ok(Event::default().event("usage").data(
-                            serde_json::to_string(&u).unwrap_or_default(),
-                        )),
+                            ))
+                        }
+                        Ok(RunEvent::Usage(u)) => Ok(Event::default()
+                            .event("usage")
+                            .data(serde_json::to_string(&u).unwrap_or_default())),
                         Ok(RunEvent::Done(output)) => {
                             let json = serde_json::json!({
                                 "text": output.text,
@@ -148,9 +148,7 @@ async fn chat(
                         Ok(RunEvent::ToolCallDelta { .. }) => {
                             continue; // accumulated into ToolCallEnd
                         }
-                        Err(e) => Ok(Event::default()
-                            .event("error")
-                            .data(e.to_string())),
+                        Err(e) => Ok(Event::default().event("error").data(e.to_string())),
                     };
                     if tx.unbounded_send(sse_event).is_err() {
                         break;
@@ -158,9 +156,7 @@ async fn chat(
                 }
             }
             Err(e) => {
-                let _ = tx.unbounded_send(Ok(Event::default()
-                    .event("error")
-                    .data(e.to_string())));
+                let _ = tx.unbounded_send(Ok(Event::default().event("error").data(e.to_string())));
             }
         }
         // Channel closed when tx is dropped — SSE stream ends.

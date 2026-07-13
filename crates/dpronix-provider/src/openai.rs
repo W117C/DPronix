@@ -1,5 +1,5 @@
 use crate::types::{
-    ChatCompletionRequest, ChatCompletionResponse, OpenAIFunction, OpenAIRequestTool,
+    ChatCompletionResponse, OpenAIFunction, OpenAIRequestTool,
     StreamResponse,
 };
 use crate::{Provider, ProviderError};
@@ -91,15 +91,30 @@ impl OpenAIProvider {
         Some(oai_tools)
     }
 
-    fn build_request(&self, messages: &[Message], tools: &[&dyn Tool], stream: bool) -> serde_json::Value {
+    fn build_request(
+        &self,
+        messages: &[Message],
+        tools: &[&dyn Tool],
+        stream: bool,
+    ) -> serde_json::Value {
         // Merge extra_body with thinking mode parameter
-        let mut extra = self.extra_body.clone().unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+        let mut extra = self
+            .extra_body
+            .clone()
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
         if self.thinking_enabled {
             if let serde_json::Value::Object(ref mut map) = extra {
-                map.insert("thinking".to_string(), serde_json::json!({"type": "enabled"}));
+                map.insert(
+                    "thinking".to_string(),
+                    serde_json::json!({"type": "enabled"}),
+                );
             }
         }
-        let extra_body = if extra.as_object().map_or(false, |o| !o.is_empty()) { Some(extra) } else { None };
+        let extra_body = if extra.as_object().is_some_and(|o| !o.is_empty()) {
+            Some(extra)
+        } else {
+            None
+        };
 
         let mut req = serde_json::json!({
             "model": self.model,
@@ -112,23 +127,24 @@ impl OpenAIProvider {
         if let Some(ref effort) = self.reasoning_effort {
             req["reasoning_effort"] = serde_json::json!(effort);
         }
-        if let Some(ref eb) = extra_body {
-            if let serde_json::Value::Object(ref eb_map) = eb {
-                for (k, v) in eb_map {
-                    req[k] = v.clone();
-                }
+        if let Some(serde_json::Value::Object(ref eb_map)) = extra_body {
+            for (k, v) in eb_map {
+                req[k] = v.clone();
             }
         }
         req
     }
 
-    async fn send_request(
-        &self,
-        body: &serde_json::Value,
-    ) -> anyhow::Result<reqwest::Response> {
+    async fn send_request(&self, body: &serde_json::Value) -> anyhow::Result<reqwest::Response> {
         let url = format!("{}/chat/completions", self.base_url);
 
-        info!("POST {} (stream={})", url, body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false));
+        info!(
+            "POST {} (stream={})",
+            url,
+            body.get("stream")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        );
 
         let response = self
             .client
@@ -286,14 +302,16 @@ async fn process_sse_line(
 
     // Final usage chunk
     if let Some(ref u) = resp.usage {
-        let _ = tx.send(Ok(Chunk::Usage(Usage {
-            prompt_tokens: u.prompt_tokens,
-            completion_tokens: u.completion_tokens,
-            total_tokens: u.total_tokens,
-            cache_hit_tokens: 0,
-            cache_miss_tokens: 0,
-            reasoning_tokens: 0,
-        }))).await;
+        let _ = tx
+            .send(Ok(Chunk::Usage(Usage {
+                prompt_tokens: u.prompt_tokens,
+                completion_tokens: u.completion_tokens,
+                total_tokens: u.total_tokens,
+                cache_hit_tokens: 0,
+                cache_miss_tokens: 0,
+                reasoning_tokens: 0,
+            })))
+            .await;
     }
 
     for choice in resp.choices {
@@ -311,10 +329,12 @@ async fn process_sse_line(
             // --- Reasoning content (DeepSeek thinking mode) ---
             if let Some(ref reasoning) = delta.reasoning_content {
                 if !reasoning.is_empty() {
-                    let _ = tx.send(Ok(Chunk::ReasoningDelta {
-                        text: reasoning.clone(),
-                        signature: None,
-                    })).await;
+                    let _ = tx
+                        .send(Ok(Chunk::ReasoningDelta {
+                            text: reasoning.clone(),
+                            signature: None,
+                        }))
+                        .await;
                 }
             }
 
@@ -336,10 +356,12 @@ async fn process_sse_line(
                             if let Some(ref func) = tc.function {
                                 if let Some(ref name) = func.name {
                                     acc.name = Some(name.clone());
-                                    let _ = tx.send(Ok(Chunk::ToolCallStart {
-                                        id: id.clone(),
-                                        name: name.clone(),
-                                    })).await;
+                                    let _ = tx
+                                        .send(Ok(Chunk::ToolCallStart {
+                                            id: id.clone(),
+                                            name: name.clone(),
+                                        }))
+                                        .await;
                                 }
                             }
                         }
@@ -350,10 +372,12 @@ async fn process_sse_line(
                         if let Some(ref args) = func.arguments {
                             if !args.is_empty() {
                                 let call_id = acc.id.clone().unwrap_or_default();
-                                let _ = tx.send(Ok(Chunk::ToolCallDelta {
-                                    id: call_id.clone(),
-                                    args_delta: args.clone(),
-                                })).await;
+                                let _ = tx
+                                    .send(Ok(Chunk::ToolCallDelta {
+                                        id: call_id.clone(),
+                                        args_delta: args.clone(),
+                                    }))
+                                    .await;
                                 acc.arguments.push_str(args);
                             }
                         }
@@ -378,11 +402,13 @@ async fn flush_pending_tool_calls(
 ) -> anyhow::Result<()> {
     for acc in tool_acc.drain(..) {
         if let (Some(id), Some(name)) = (acc.id, acc.name) {
-            let _ = tx.send(Ok(Chunk::ToolCallEnd {
-                id,
-                name,
-                arguments: acc.arguments,
-            })).await;
+            let _ = tx
+                .send(Ok(Chunk::ToolCallEnd {
+                    id,
+                    name,
+                    arguments: acc.arguments,
+                }))
+                .await;
         }
     }
     Ok(())
@@ -397,8 +423,9 @@ mod tests {
     use super::*;
     use dpronix_core::tool::ToolContext;
     use dpronix_core::types::ToolSchema;
-    use std::sync::Arc;
+    
 
+    #[allow(dead_code)]
     struct NoopTool;
 
     #[async_trait]
@@ -445,11 +472,25 @@ data: [DONE]
         }
 
         // Should have: TextDelta("Hello"), TextDelta(" world"), Done
-        let text_chunks: Vec<&str> = chunks.iter()
-            .filter_map(|c| if let Chunk::TextDelta(t) = c { Some(t.as_str()) } else { None })
+        let text_chunks: Vec<&str> = chunks
+            .iter()
+            .filter_map(|c| {
+                if let Chunk::TextDelta(t) = c {
+                    Some(t.as_str())
+                } else {
+                    None
+                }
+            })
             .collect();
-        assert_eq!(text_chunks, vec!["Hello", " world"], "should parse two text deltas");
-        assert!(chunks.iter().any(|c| matches!(c, Chunk::Done)), "should end with Done");
+        assert_eq!(
+            text_chunks,
+            vec!["Hello", " world"],
+            "should parse two text deltas"
+        );
+        assert!(
+            chunks.iter().any(|c| matches!(c, Chunk::Done)),
+            "should end with Done"
+        );
     }
 
     /// Verify that streaming tool_calls are accumulated into ToolCallEnd.
@@ -485,15 +526,22 @@ data: [DONE]
         }
 
         // Should have: ToolCallStart, ToolCallDelta, ToolCallDelta, ToolCallEnd, Done
-        let has_start = chunks.iter().any(|c| matches!(c, Chunk::ToolCallStart { name, .. } if name == "read_file"));
-        let has_end = chunks.iter().any(|c| matches!(c, Chunk::ToolCallEnd { name, .. } if name == "read_file"));
+        let has_start = chunks
+            .iter()
+            .any(|c| matches!(c, Chunk::ToolCallStart { name, .. } if name == "read_file"));
+        let has_end = chunks
+            .iter()
+            .any(|c| matches!(c, Chunk::ToolCallEnd { name, .. } if name == "read_file"));
         assert!(has_start, "should emit ToolCallStart for read_file");
         assert!(has_end, "should emit ToolCallEnd for read_file");
 
         // Find the ToolCallEnd and verify accumulated arguments
         for chunk in &chunks {
             if let Chunk::ToolCallEnd { arguments, .. } = chunk {
-                assert!(arguments.contains("src/main.rs"), "arguments should be fully accumulated");
+                assert!(
+                    arguments.contains("src/main.rs"),
+                    "arguments should be fully accumulated"
+                );
                 break;
             }
         }
@@ -528,9 +576,16 @@ data: [DONE]
         }
 
         // Should have: ReasoningDelta, TextDelta, Done
-        let has_reasoning = chunks.iter().any(|c| matches!(c, Chunk::ReasoningDelta { text, .. } if text == "thinking step 1..."));
-        let has_text = chunks.iter().any(|c| matches!(c, Chunk::TextDelta(t) if t == "Final answer"));
-        assert!(has_reasoning, "should parse reasoning_content as ReasoningDelta");
+        let has_reasoning = chunks.iter().any(
+            |c| matches!(c, Chunk::ReasoningDelta { text, .. } if text == "thinking step 1..."),
+        );
+        let has_text = chunks
+            .iter()
+            .any(|c| matches!(c, Chunk::TextDelta(t) if t == "Final answer"));
+        assert!(
+            has_reasoning,
+            "should parse reasoning_content as ReasoningDelta"
+        );
         assert!(has_text, "should parse content as TextDelta");
     }
 }

@@ -24,12 +24,12 @@
 //! ```
 
 use crossterm::event::{self, Event as CEvent, KeyCode, KeyEventKind};
+use dpronix_core::runner::{RunEvent, RunInput, Runner};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame};
-use dpronix_core::runner::{RunEvent, RunInput, Runner};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -227,15 +227,19 @@ impl AppState {
             .split(area);
 
         // ── Conversation pane ────────────────────────────────
-        let title = if self.running { "🧠 thinking…" } else { "💬 ready" };
-        let conv_block = Block::default()
-            .borders(Borders::ALL)
-            .title(title);
+        let title = if self.running {
+            "🧠 thinking…"
+        } else {
+            "💬 ready"
+        };
+        let conv_block = Block::default().borders(Borders::ALL).title(title);
 
         let mut text_lines: Vec<Line> = Vec::new();
         for line in &self.lines {
             let style = match line.kind {
-                LineType::User => Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                LineType::User => Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
                 LineType::Agent => Style::default().fg(Color::White),
                 LineType::Tool => Style::default().fg(Color::Yellow),
                 LineType::ToolResult => Style::default().fg(Color::DarkGray),
@@ -288,8 +292,7 @@ impl AppState {
         let input_block = Block::default()
             .borders(Borders::ALL)
             .title("> prompt  (Esc to quit)");
-        let input_widget = Paragraph::new(Span::styled(input_text, input_style))
-            .block(input_block);
+        let input_widget = Paragraph::new(Span::styled(input_text, input_style)).block(input_block);
         f.render_widget(input_widget, chunks[2]);
     }
 }
