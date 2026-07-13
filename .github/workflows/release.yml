@@ -152,7 +152,7 @@ jobs:
         with:
           name: Release ${{ github.ref_name }}
           body: |
-            ## DPRonix ${{ github.ref_name }}
+            ## DPronix ${{ github.ref_name }}
 
             ### Downloads
             See artifacts attached to this release.
