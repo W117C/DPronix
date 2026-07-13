@@ -295,9 +295,9 @@ impl ProjectMemory {
         }
     }
 
-    /// Load REASONIX.md from the workspace root if present.
+    /// Load DPRONIX.md from the workspace root if present.
     pub fn load_dpronix_md(&mut self, root: &Path) {
-        let path = root.join("REASONIX.md");
+        let path = root.join("DPRONIX.md");
         if path.exists() {
             if let Ok(content) = std::fs::read_to_string(&path) {
                 self.dpronix_md = Some(content);

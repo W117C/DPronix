@@ -2,7 +2,7 @@ use anyhow::Context;
 use std::path::Path;
 
 /// Initialize a new dpronix project in the current directory.
-/// Creates: REASONIX.md, dpronix.toml (if not exists),
+/// Creates: DPRONIX.md, dpronix.toml (if not exists),
 /// .dpronix/commands/ (empty dir), .dpronix/memory/ (empty dir).
 pub async fn run_init() -> anyhow::Result<()> {
     let cwd = std::env::current_dir().context("cannot determine current directory")?;
@@ -17,8 +17,8 @@ pub async fn run_init() -> anyhow::Result<()> {
     std::fs::create_dir_all(&memory_dir)
         .with_context(|| format!("failed to create {}", memory_dir.display()))?;
 
-    // Create REASONIX.md if it doesn't exist
-    let dpronix_md_path = cwd.join("REASONIX.md");
+    // Create DPRONIX.md if it doesn't exist
+    let dpronix_md_path = cwd.join("DPRONIX.md");
     if !dpronix_md_path.exists() {
         let project_name = cwd
             .file_name()
@@ -49,9 +49,9 @@ Custom slash commands go in .dpronix/commands/ as .md files.
         );
         std::fs::write(&dpronix_md_path, template)
             .with_context(|| format!("failed to write {}", dpronix_md_path.display()))?;
-        println!("✓ Created REASONIX.md");
+        println!("✓ Created DPRONIX.md");
     } else {
-        println!("  REASONIX.md already exists — skipping");
+        println!("  DPRONIX.md already exists — skipping");
     }
 
     // Create dpronix.toml if it doesn't exist
@@ -87,7 +87,7 @@ Run the project build command and report any errors.
     println!("dpronix project initialized at {}", cwd.display());
     println!();
     println!("Next steps:");
-    println!("  1. Edit REASONIX.md with your project context");
+    println!("  1. Edit DPRONIX.md with your project context");
     println!("  2. Add custom commands to .dpronix/commands/");
     println!("  3. Run `dpronix chat` to start a session");
 
