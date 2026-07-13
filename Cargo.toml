@@ -55,7 +55,7 @@ sha2 = "0.10"
 hex = "0.4"
 url = "2.5"
 ratatui = "0.29"
-crossterm = "0.28"
+crossterm = "0.29"
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
