@@ -2,6 +2,28 @@
 
 All notable changes to dpronix-rs will be documented in this file.
 
+## [0.3.0] — 2026-07-13
+
+### Security
+
+#### 阻断性修复
+- 修复生产路径 `agent.rs` / `coordinator.rs` 创建 `ToolContext` 时缺失 `SecurityContext` 注入，导致运行时所有内置工具调用触发 *"SecurityContext extension not found"* 崩溃的问题
+- `Agent` 与 `CoordinatorRunner` 新增 `workspace_root` + `security` 字段，默认 `cwd` + `SecurityContext::with_safe_defaults()`，提供 `with_workspace_root` / `with_security` builder 覆盖
+- 两处 ToolContext 生产创建点统一 `.with_workspace(workspace_root).with_extension(security)` 注入
+
+#### 可配置安全策略
+- `dpronix-config` 新增 `[security]` 配置段：`disabled_capabilities`、`allowed_paths`、`denied_paths`、`allowed_commands`、`allowed_domains`、`limits.*`（max_files/max_file_size/max_total_read_bytes/max_execution_time_secs/max_output_bytes/max_tool_calls），支持分层 merge
+- `dpronix-runtime` 新增 `build_security_context(config, workspace_root)` 作为安全组装中心；工作区根自动加入 allow-list 首条；`disabled_capabilities` 从全能力集合移除；未设置的限额保留库默认
+- `dpronix-cli` 的 `build_agent` 与 `CoordinatorRunner` 构建路径调用 `build_security_context` 注入受限策略；`build_agent` 改为返回 `anyhow::Result`
+
+#### 测试
+- `dpronix-config` 新增 2 个 SecurityConfig merge 测试（默认值保持 + 白名单/限额覆盖）
+- `dpronix-runtime` 新增 3 个 build_security_context 测试（默认全能力 + 工作区根自动注入、disabled + 命令/域名/路径白名单 + denied_paths、limits.* 覆盖与默认保留）
+
+#### 文档与仓库配置
+- `.gitignore` 追加 `.reasonix/`；`README.md` 新增「安全」段与 `dpronix-security` crate 条目；`CONTRIBUTING.md` 追加 `dpronix-security`；`CHANGELOG.md` 新增 `[0.3.0]`
+- 新增 `SECURITY.md`（漏洞披露与响应流程）；新增 `CODEOWNERS`
+
 ## [0.2.0] — 2026-07-12
 
 ### Added
