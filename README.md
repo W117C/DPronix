@@ -184,6 +184,7 @@ compaction_threshold_tokens = 32000
 │   ├── dpronix-event/           # 事件总线
 │   ├── dpronix-runtime/         # 组合根
 │   ├── dpronix-sandbox/         # 沙箱
+│   ├── dpronix-security/        # 安全策略（能力/路径/命令/域名/资源限额）
 │   ├── dpronix-checkpoint/      # 检查点
 │   ├── dpronix-store/           # 会话持久化
 │   ├── dpronix-tui/             # TUI
@@ -216,3 +217,40 @@ cargo doc --no-deps --workspace --document-private-items
 ## License
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT License](LICENSE-MIT) at your option.
+
+## 安全
+
+dpronix 在 agent / coordinator 每一个工具执行点上，通过 [dpronix-security](crates/dpronix-security) 注入可配置的安全策略。策略通过 `dpronix.toml` 或 `~/.dpronix/config.toml` 的 `[security]` 段配置，启动时由 [dpronix-runtime](crates/dpronix-runtime) 组装成 [`SecurityContext`]，并注入每个 `ToolContext` 的 extensions。
+
+### 默认策略（开箱即用）
+
+| 维度 | 默认值 |
+|---|---|
+| capabilities | 全能力开放 `file_read / file_write / command_execute / network_access / mcp_invoke / memory_read / memory_write` |
+| 允许路径 | 仅当前工作区根目录（`cwd`），自动加入 allow-list |
+| 命令/域名 | 不限制 |
+| 资源限额 | 文件数 500 / 单文件 1 MB / 总读取 50 MB / 执行 120 s / 输出 10 MB / 工具调用 100 次 |
+
+### 配置示例
+
+```toml
+# ~/.dpronix/config.toml  或  ./dpronix.toml
+[security]
+disabled_capabilities = ["command_execute", "network_access"]
+allowed_paths  = ["/data/build"]
+denied_paths    = ["/data/build/secrets"]
+allowed_commands = ["git", "cargo"]
+allowed_domains  = ["api.github.com"]
+
+[security.limits]
+max_files               = 100
+max_file_size           = 1048576      # 1 MB
+max_total_read_bytes    = 52428800     # 50 MB
+max_execution_time_secs = 60
+max_output_bytes        = 10485760     # 10 MB
+max_tool_calls          = 50
+```
+
+`SecurityContext` 由 [dpronix-runtime](crates/dpronix-runtime) 运行时构建；`disabled_capabilities` 从全能力集合里移除；`allowed_paths` 自动预置工作区根（首条）；`denied_paths` 优先于全部 allow 规则。审计日志通过 `TracingAuditLogger` 输出到 tracing substrate。
+
+[`SecurityContext`]: crates/dpronix-security/src/context.rs

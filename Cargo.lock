@@ -1206,6 +1206,7 @@ dependencies = [
  "async-trait",
  "dpronix-core",
  "dpronix-provider",
+ "dpronix-security",
  "serde",
  "serde_json",
  "tokio",
@@ -1242,6 +1243,7 @@ dependencies = [
  "dpronix-config",
  "dpronix-core",
  "dpronix-provider",
+ "dpronix-runtime",
  "dpronix-skills",
  "dpronix-tools",
  "tokio",
@@ -1421,6 +1423,7 @@ dependencies = [
  "dpronix-event",
  "dpronix-permission",
  "dpronix-provider",
+ "dpronix-security",
  "dpronix-tools",
  "tokio",
  "tracing",
@@ -1433,6 +1436,15 @@ dependencies = [
  "anyhow",
  "dpronix-core",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "dpronix-security"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dpronix-core",
  "tracing",
 ]
 
@@ -1510,6 +1522,7 @@ dependencies = [
  "dpronix-checkpoint",
  "dpronix-core",
  "dpronix-sandbox",
+ "dpronix-security",
  "glob",
  "hex",
  "regex",

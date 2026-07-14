@@ -20,6 +20,7 @@ members = [
     "crates/dpronix-telemetry",
     "crates/dpronix-desktop",
     "crates/dpronix-orch",
+    "crates/dpronix-security",
 ]
 resolver = "2"
 default-members = [
@@ -42,6 +43,7 @@ default-members = [
     "crates/dpronix-skills",
     "crates/dpronix-telemetry",
     "crates/dpronix-orch",
+    "crates/dpronix-security",
 ]
 
 [workspace.lints.rust]
