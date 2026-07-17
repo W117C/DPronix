@@ -94,3 +94,114 @@ pub fn sanitize_path(workspace: &Path, raw: &str) -> anyhow::Result<PathBuf> {
     }
     secure_resolve(workspace, Path::new(raw))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── normalize_path ───────────────────────────────────────────
+
+    #[test]
+    fn test_normalize_path_noop() {
+        let p = normalize_path(Path::new("/a/b/c"));
+        assert_eq!(p, PathBuf::from("/a/b/c"));
+    }
+
+    #[test]
+    fn test_normalize_path_removes_dot() {
+        let p = normalize_path(Path::new("/a/./b"));
+        assert_eq!(p, PathBuf::from("/a/b"));
+    }
+
+    #[test]
+    fn test_normalize_path_resolves_dotdot() {
+        let p = normalize_path(Path::new("/a/b/../c"));
+        assert_eq!(p, PathBuf::from("/a/c"));
+    }
+
+    #[test]
+    fn test_normalize_path_escape_attempt() {
+        let p = normalize_path(Path::new("/a/b/../../etc/passwd"));
+        assert_eq!(p, PathBuf::from("/etc/passwd"));
+    }
+
+    // ── secure_resolve ───────────────────────────────────────────
+
+    #[test]
+    fn test_secure_resolve_normal_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(tmp.path()).unwrap();
+        let res = secure_resolve(&root, Path::new("src/main.rs")).unwrap();
+        assert_eq!(res, root.join("src/main.rs"));
+    }
+
+    #[test]
+    fn test_secure_resolve_rejects_traversal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(tmp.path()).unwrap();
+        let res = secure_resolve(&root, Path::new("../../etc/passwd"));
+        assert!(res.is_err(), "should block traversal escape");
+    }
+
+    #[test]
+    fn test_secure_resolve_rejects_absolute_path_escape() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(tmp.path()).unwrap();
+        let res = secure_resolve(&root, Path::new("/etc"));
+        assert!(res.is_err(), "should block absolute path escape");
+    }
+
+    #[test]
+    fn test_secure_resolve_allows_deep_nested_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(tmp.path()).unwrap();
+        // Create deep nested dir
+        let deep = root.join("a/b/c/d");
+        std::fs::create_dir_all(&deep).unwrap();
+        let res = secure_resolve(&root, Path::new("a/b/c/d/file.txt")).unwrap();
+        assert_eq!(res, deep.join("file.txt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_secure_resolve_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(tmp.path()).unwrap();
+
+        let outside_tmp = tempfile::tempdir().unwrap();
+        let outside_path = std::fs::canonicalize(outside_tmp.path()).unwrap();
+        let link_path = root.join("bad_symlink");
+
+        if symlink(&outside_path, &link_path).is_ok() {
+            let res = secure_resolve(&root, Path::new("bad_symlink/some_file"));
+            assert!(res.is_err(), "should block symlink escape: {:?}", res);
+        }
+    }
+
+    // ── sanitize_path ────────────────────────────────────────────
+
+    #[test]
+    fn test_sanitize_path_rejects_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let res = sanitize_path(tmp.path(), "");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("empty path"));
+    }
+
+    #[test]
+    fn test_sanitize_path_rejects_null_byte() {
+        let tmp = tempfile::tempdir().unwrap();
+        let res = sanitize_path(tmp.path(), "safe\0.txt");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("null byte"));
+    }
+
+    #[test]
+    fn test_sanitize_path_accepts_valid_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(tmp.path()).unwrap();
+        let res = sanitize_path(&root, "valid/file.txt").unwrap();
+        assert_eq!(res, root.join("valid/file.txt"));
+    }
+}

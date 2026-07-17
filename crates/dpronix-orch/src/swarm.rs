@@ -40,7 +40,32 @@ impl Default for SwarmConfig {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_swarm_config_defaults() {
+        let config = SwarmConfig::default();
+        assert_eq!(config.max_workers, 5);
+        assert!(!config.consensus_required);
+        assert!(config.thinking_enabled);
+        assert_eq!(config.reasoning_effort, "high");
+    }
+
+    #[test]
+    fn test_swarm_config_partial_override() {
+        let config = SwarmConfig {
+            max_workers: 3,
+            ..SwarmConfig::default()
+        };
+        assert_eq!(config.max_workers, 3);
+        assert!(config.thinking_enabled); // inherited
+    }
+}
+
 /// The Swarm Coordinator — manages a team of agents working on a shared goal.
+#[allow(dead_code)]
 pub struct SwarmCoordinator {
     agents: HashMap<String, SwarmAgent>,
     config: SwarmConfig,

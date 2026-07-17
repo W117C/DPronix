@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-agent"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-checkpoint"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1234,7 +1234,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-cli"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1242,10 +1242,14 @@ dependencies = [
  "dpronix-agent",
  "dpronix-config",
  "dpronix-core",
+ "dpronix-mcp",
+ "dpronix-orch",
  "dpronix-provider",
  "dpronix-runtime",
+ "dpronix-security",
  "dpronix-skills",
  "dpronix-tools",
+ "serde_json",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -1254,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-config"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1266,7 +1270,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-context"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1280,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-core"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1304,7 +1308,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-desktop"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-agent",
@@ -1332,7 +1336,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-event"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "dpronix-core",
  "serde",
@@ -1342,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-mcp"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1358,7 +1362,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-orch"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1380,7 +1384,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-permission"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-config",
@@ -1395,7 +1399,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-provider"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1413,7 +1417,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-runtime"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-agent",
@@ -1431,7 +1435,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-sandbox"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-core",
@@ -1441,16 +1445,17 @@ dependencies = [
 
 [[package]]
 name = "dpronix-security"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-core",
+ "tempfile",
  "tracing",
 ]
 
 [[package]]
 name = "dpronix-serve"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1470,7 +1475,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-skills"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1486,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-store"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1499,7 +1504,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-telemetry"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "opentelemetry",
@@ -1514,7 +1519,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-tools"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1539,7 +1544,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-tui"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",

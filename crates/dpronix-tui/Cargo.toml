@@ -13,7 +13,7 @@ tokio-stream = { workspace = true }
 tracing = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
-dpronix-core = { version = "0.1.0", path = "../dpronix-core" }
+dpronix-core = { version = "0.3.0", path = "../dpronix-core" }
 
 [dev-dependencies]
 async-trait = { workspace = true }

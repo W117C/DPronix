@@ -1,3 +1,8 @@
+//! # Runtime — Composition root
+//!
+//! Wires together all DPronix subsystems: registry, context, event bus,
+//! permission, security, and LLM provider into a ready-to-use agent runtime.
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -206,7 +211,10 @@ mod tests {
             Capability::MemoryRead,
             Capability::MemoryWrite,
         ] {
-            assert!(ctx.capabilities.contains(&cap), "expected {cap:?} granted by default");
+            assert!(
+                ctx.capabilities.contains(&cap),
+                "expected {cap:?} granted by default"
+            );
         }
         // 工作区根必须自动出现在允许路径里（即使配置无 allowed_paths）。
         assert!(ctx.policy.allowed_paths.iter().any(|p| p == &root));
@@ -217,12 +225,14 @@ mod tests {
     #[test]
     fn build_security_context_honors_disabled_capabilities_and_lists() {
         let mut config = Config::default();
-        config.security.disabled_capabilities = vec!["command_execute".into(), "network_access".into()];
+        config.security.disabled_capabilities =
+            vec!["command_execute".into(), "network_access".into()];
         config.security.allowed_commands = vec!["git".into()];
         config.security.allowed_domains = vec!["api.github.com".into()];
         config.security.denied_paths = vec!["/tmp/build/secret".into()];
 
-        let root = std::env::temp_dir().join(format!("dpronix-sec-restricted-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("dpronix-sec-restricted-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
 
         let ctx = super::build_security_context(&config, &root).unwrap();
@@ -230,8 +240,15 @@ mod tests {
         assert!(!ctx.capabilities.contains(&Capability::NetworkAccess));
         assert!(ctx.capabilities.contains(&Capability::FileRead));
         assert_eq!(ctx.policy.allowed_commands, vec!["git".to_string()]);
-        assert_eq!(ctx.policy.allowed_domains, vec!["api.github.com".to_string()]);
-        assert!(ctx.policy.denied_paths.iter().any(|p| p.to_string_lossy().contains("secret")));
+        assert_eq!(
+            ctx.policy.allowed_domains,
+            vec!["api.github.com".to_string()]
+        );
+        assert!(ctx
+            .policy
+            .denied_paths
+            .iter()
+            .any(|p| p.to_string_lossy().contains("secret")));
         // 工作区根 join 在用户 allowed_paths 之前。
         assert!(ctx.policy.allowed_paths.first().unwrap() == &root);
 
@@ -250,7 +267,10 @@ mod tests {
 
         let ctx = super::build_security_context(&config, &root).unwrap();
         assert_eq!(ctx.limits.max_files, 7);
-        assert_eq!(ctx.limits.max_execution_time, std::time::Duration::from_secs(120));
+        assert_eq!(
+            ctx.limits.max_execution_time,
+            std::time::Duration::from_secs(120)
+        );
         assert_eq!(ctx.limits.max_output_bytes, 1024);
         // 未覆盖的限额保留默认值。
         assert_eq!(ctx.limits.max_tool_calls, 100);

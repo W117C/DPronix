@@ -143,6 +143,7 @@ impl GoalPlanner {
     }
 
     /// Build the system prompt for planning.
+    #[allow(dead_code)]
     fn system_prompt(&self) -> String {
         format!(
             r#"You are a Goal-Oriented Action Planning (GOAP) expert for an AI coding agent.
@@ -418,5 +419,29 @@ Constraints:
                 Ok(false)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_planner_config_defaults() {
+        let config = PlannerConfig::default();
+        assert_eq!(config.reasoning_effort, "high");
+        assert_eq!(config.max_actions, 20);
+        assert_eq!(config.max_retries, 3);
+        assert!(config.thinking_enabled);
+    }
+
+    #[test]
+    fn test_planner_config_partial_override() {
+        let config = PlannerConfig {
+            max_actions: 10,
+            ..PlannerConfig::default()
+        };
+        assert_eq!(config.max_actions, 10);
+        assert_eq!(config.reasoning_effort, "high"); // inherited
     }
 }

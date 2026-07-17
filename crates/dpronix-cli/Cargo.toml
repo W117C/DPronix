@@ -12,11 +12,17 @@ tokio-stream = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-dpronix-core = { version = "0.1.0", path = "../dpronix-core" }
-dpronix-config = { version = "0.1.0", path = "../dpronix-config" }
-dpronix-provider = { version = "0.1.0", path = "../dpronix-provider" }
-dpronix-agent = { version = "0.1.0", path = "../dpronix-agent" }
-dpronix-tools = { version = "0.1.0", path = "../dpronix-tools" }
-dpronix-runtime = { version = "0.1.0", path = "../dpronix-runtime" }
-dpronix-skills = { version = "0.1.0", path = "../dpronix-skills" }
+dpronix-core = { version = "0.3.0", path = "../dpronix-core" }
+dpronix-config = { version = "0.3.0", path = "../dpronix-config" }
+dpronix-provider = { version = "0.3.0", path = "../dpronix-provider" }
+dpronix-agent = { version = "0.3.0", path = "../dpronix-agent" }
+dpronix-tools = { version = "0.3.0", path = "../dpronix-tools" }
+dpronix-runtime = { version = "0.3.0", path = "../dpronix-runtime" }
+dpronix-skills = { version = "0.3.0", path = "../dpronix-skills" }
 dirs = { workspace = true }
+
+[dev-dependencies]
+dpronix-security = { version = "0.3.0", path = "../dpronix-security" }
+dpronix-mcp = { version = "0.3.0", path = "../dpronix-mcp" }
+dpronix-orch = { version = "0.3.0", path = "../dpronix-orch" }
+serde_json = { workspace = true }

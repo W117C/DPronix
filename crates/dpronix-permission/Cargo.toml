@@ -13,5 +13,5 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
-dpronix-core = { version = "0.1.0", path = "../dpronix-core" }
-dpronix-config = { version = "0.1.0", path = "../dpronix-config" }
+dpronix-core = { version = "0.3.0", path = "../dpronix-core" }
+dpronix-config = { version = "0.3.0", path = "../dpronix-config" }

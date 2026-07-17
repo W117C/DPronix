@@ -1,40 +1,67 @@
-.PHONY: all build check test clean run release cross
+.PHONY: all build check test clean run release \
+        release-patch release-minor release-major \
+        check-all test-all clippy-fix example
 
-# Default build target
+# ── Default ─────────────────────────────────────────────────────
 all: build
 
-# Build the project in debug mode
+# ── Build ───────────────────────────────────────────────────────
 build:
 	cargo build
 
-# Run formatting, clippy, tests, and documentation checks
+# ── Comprehensive check (CI equivalent) ────────────────────────
 check:
 	cargo fmt --all -- --check
 	cargo clippy --workspace --exclude dpronix-desktop --all-targets -- -D warnings
 	cargo test --workspace --exclude dpronix-desktop
 	cargo doc --workspace --exclude dpronix-desktop --no-deps --document-private-items
 
-# Format code
+check-all:
+	cargo fmt --all -- --check
+	cargo clippy --workspace --all-targets -- -D warnings || true
+	cargo test --workspace
+
+# ── Format ──────────────────────────────────────────────────────
 fmt:
 	cargo fmt --all
 
-# Run all tests
+# ── Test ────────────────────────────────────────────────────────
 test:
 	cargo test --all
 
-# Run the CLI app locally
+test-all:
+	cargo test --workspace
+
+# ── Clippy auto-fix ─────────────────────────────────────────────
+clippy-fix:
+	cargo clippy --workspace --exclude dpronix-desktop --all-targets --fix --allow-dirty
+
+# ── Run ─────────────────────────────────────────────────────────
 run:
 	cargo run --bin dpronix-cli
 
-# Build for release
+# ── Example ─────────────────────────────────────────────────────
+example:
+	cargo run --example quickstart -p dpronix-cli
+
+# ── Release build ───────────────────────────────────────────────
 release:
 	cargo build --release
 
-# Clean the target directory
+# ── Version bumping ─────────────────────────────────────────────
+release-patch:
+	./scripts/bump-version.sh patch
+
+release-minor:
+	./scripts/bump-version.sh minor
+
+release-major:
+	./scripts/bump-version.sh major
+
+# ── Clean ───────────────────────────────────────────────────────
 clean:
 	cargo clean
 
-# Cross-compilation (example: to linux x86_64)
-# Requires cross: cargo install cross
+# ── Cross-compilation ──────────────────────────────────────────
 cross-linux:
 	cross build --target x86_64-unknown-linux-gnu --release
