@@ -1,4 +1,4 @@
-#![allow(dead_code, clippy::too_many_arguments, clippy::never_loop)]
+#![allow(clippy::too_many_arguments, clippy::never_loop)]
 //! # dpronix-agent
 //!
 //! Agent implementations — the brains of dpronix. Each agent type implements

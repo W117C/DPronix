@@ -506,6 +506,7 @@ pub fn estimate_tokens(messages: &[Message]) -> u32 {
     (char_count as f32 / CHARS_PER_TOKEN).ceil() as u32
 }
 
+#[allow(dead_code)]
 fn format_role(role: Role) -> &'static str {
     match role {
         Role::System => "System",

@@ -10,4 +10,4 @@ description = "Sandbox trait and platform-specific sandbox implementations"
 anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-dpronix-core = { version = "0.1.0", path = "../dpronix-core" }
+dpronix-core = { version = "0.3.0", path = "../dpronix-core" }

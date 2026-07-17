@@ -21,15 +21,15 @@ tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
-dpronix-core = { version = "0.1.0", path = "../dpronix-core" }
-dpronix-agent = { version = "0.1.0", path = "../dpronix-agent" }
-dpronix-config = { version = "0.1.0", path = "../dpronix-config" }
-dpronix-provider = { version = "0.1.0", path = "../dpronix-provider" }
-dpronix-tools = { version = "0.1.0", path = "../dpronix-tools" }
-dpronix-runtime = { version = "0.1.0", path = "../dpronix-runtime" }
-dpronix-store = { version = "0.1.0", path = "../dpronix-store" }
-dpronix-skills = { version = "0.1.0", path = "../dpronix-skills" }
-dpronix-event = { version = "0.1.0", path = "../dpronix-event" }
+dpronix-core = { version = "0.3.0", path = "../dpronix-core" }
+dpronix-agent = { version = "0.3.0", path = "../dpronix-agent" }
+dpronix-config = { version = "0.3.0", path = "../dpronix-config" }
+dpronix-provider = { version = "0.3.0", path = "../dpronix-provider" }
+dpronix-tools = { version = "0.3.0", path = "../dpronix-tools" }
+dpronix-runtime = { version = "0.3.0", path = "../dpronix-runtime" }
+dpronix-store = { version = "0.3.0", path = "../dpronix-store" }
+dpronix-skills = { version = "0.3.0", path = "../dpronix-skills" }
+dpronix-event = { version = "0.3.0", path = "../dpronix-event" }
 
 [features]
 default = ["custom-protocol"]

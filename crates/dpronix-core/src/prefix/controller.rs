@@ -55,10 +55,24 @@ impl PrefixController for StandardPrefixController {
         self.current_state.clone()
     }
 
-    fn propose_mutation(&self, _tx: PrefixTransaction) -> Result<MutationPlan> {
-        // Implementation typically delegates to transaction::prepare_transaction
-        // (Left as stub for interface definition)
-        unimplemented!()
+    fn propose_mutation(&self, tx: PrefixTransaction) -> Result<MutationPlan> {
+        let current = self.current_state();
+
+        // Use proposed state's hashes if available, otherwise current state's hashes
+        let hashes = match &tx.proposed_state {
+            Some(proposed) => (
+                proposed.system_hash.clone(),
+                proposed.tool_registry_hash.clone(),
+                proposed.memory_hash.clone(),
+            ),
+            None => (
+                current.system_hash.clone(),
+                current.tool_registry_hash.clone(),
+                current.memory_hash.clone(),
+            ),
+        };
+
+        super::transaction::prepare_transaction(&current, tx, hashes)
     }
 
     fn commit(&self, plan: MutationPlan) -> Result<EpochCommit> {

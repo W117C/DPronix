@@ -1,3 +1,8 @@
+//! # Checkpoint — File state snapshot and rollback manager
+//!
+//! Provides transactional file-system checkpoints so agents can
+//! commit or revert batches of file changes safely.
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};

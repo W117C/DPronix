@@ -709,7 +709,10 @@ mod tests {
         base.merge(override_cfg);
 
         assert_eq!(base.security.disabled_capabilities.len(), 2);
-        assert!(base.security.disabled_capabilities.contains(&"file_write".to_string()));
+        assert!(base
+            .security
+            .disabled_capabilities
+            .contains(&"file_write".to_string()));
         assert_eq!(base.security.allowed_paths, vec!["/tmp/build".to_string()]);
         assert_eq!(base.security.allowed_commands, vec!["git".to_string()]);
         assert_eq!(base.security.limits.max_files, Some(42));

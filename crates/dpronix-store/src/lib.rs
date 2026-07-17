@@ -1,3 +1,9 @@
+//! # Store — Session persistence
+//!
+//! JSONL-based session recording: persists every agent turn to disk
+//! for replay, debugging, and analytics.
+//! Supports rotation and compaction.
+
 use dpronix_core::{Message, Role, RunInput};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

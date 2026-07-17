@@ -42,6 +42,34 @@ pub struct McpConnection {
     _writer_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
 }
 
+#[cfg(test)]
+impl McpConnection {
+    /// Create a minimal McpConnection for testing (no actual process spawned).
+    pub fn new_test() -> Self {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        Self {
+            child: RwLock::new(None),
+            write_tx: tx,
+            pending: Arc::new(RwLock::new(HashMap::new())),
+            next_id: AtomicU64::new(1),
+            request_timeout: Duration::from_secs(5),
+            server_info: RwLock::new(ServerInfo {
+                name: "test-server".into(),
+                version: "1.0.0".into(),
+            }),
+            server_capabilities: RwLock::new(ServerCapabilities {
+                tools: None,
+                resources: None,
+                prompts: None,
+                logging: None,
+                experimental: None,
+            }),
+            _reader_handle: RwLock::new(None),
+            _writer_handle: RwLock::new(None),
+        }
+    }
+}
+
 impl McpConnection {
     /// Spawn an MCP server, perform the initialize handshake, and return
     /// a ready-to-use connection.

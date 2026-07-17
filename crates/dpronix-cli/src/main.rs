@@ -51,8 +51,7 @@ async fn main() -> anyhow::Result<()> {
                 let max_nodes = coordinator.max_graph_nodes;
 
                 let workspace_root = std::env::current_dir().unwrap_or_default();
-                let security =
-                    dpronix_runtime::build_security_context(&config, &workspace_root)?;
+                let security = dpronix_runtime::build_security_context(&config, &workspace_root)?;
                 let mut runner = CoordinatorRunner::new(planner_provider, executor_provider)
                     .with_max_graph_nodes(max_nodes)
                     .with_workspace_root(workspace_root)

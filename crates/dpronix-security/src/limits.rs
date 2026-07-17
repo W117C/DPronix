@@ -22,3 +22,42 @@ impl Default for ResourceLimits {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_limits_are_reasonable() {
+        let limits = ResourceLimits::default();
+        assert_eq!(limits.max_files, 500, "max_files should be 500");
+        assert_eq!(
+            limits.max_file_size, 1_048_576,
+            "max_file_size should be 1 MB"
+        );
+        assert_eq!(
+            limits.max_total_read_bytes, 52_428_800,
+            "max_total_read_bytes should be 50 MB"
+        );
+        assert_eq!(
+            limits.max_execution_time,
+            Duration::from_secs(120),
+            "max_execution_time should be 120s"
+        );
+        assert_eq!(
+            limits.max_output_bytes, 10_485_760,
+            "max_output_bytes should be 10 MB"
+        );
+        assert_eq!(limits.max_tool_calls, 100, "max_tool_calls should be 100");
+    }
+
+    #[test]
+    fn test_limits_can_be_partially_overridden() {
+        let limits = ResourceLimits {
+            max_files: 10,
+            ..ResourceLimits::default()
+        };
+        assert_eq!(limits.max_files, 10);
+        assert_eq!(limits.max_file_size, 1_048_576); // inherited from default
+    }
+}

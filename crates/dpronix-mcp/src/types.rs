@@ -237,3 +237,198 @@ pub struct PromptArgument {
     #[serde(default)]
     pub required: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ── JSON-RPC base ────────────────────────────────────────────
+
+    #[test]
+    fn test_jsonrpc_request_serialization() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: 1,
+            method: "tools/list".into(),
+            params: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"jsonrpc\":\"2.0\""));
+        assert!(json.contains("\"method\":\"tools/list\""));
+        // params should be omitted when None (skip_serializing_if)
+        assert!(!json.contains("params"), "params should be omitted: {json}");
+    }
+
+    #[test]
+    fn test_jsonrpc_response_success_deserialization() {
+        let json_str = r#"{"jsonrpc":"2.0","id":1,"result":{"name":"test"}}"#;
+        let resp: JsonRpcResponse = serde_json::from_str(json_str).unwrap();
+        assert_eq!(resp.jsonrpc, "2.0");
+        assert_eq!(resp.id, Some(1));
+        assert!(resp.result.is_some());
+        assert!(resp.error.is_none());
+    }
+
+    #[test]
+    fn test_jsonrpc_response_error_deserialization() {
+        let json_str =
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}"#;
+        let resp: JsonRpcResponse = serde_json::from_str(json_str).unwrap();
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, -32601);
+        assert_eq!(err.message, "Method not found");
+    }
+
+    #[test]
+    fn test_jsonrpc_notification_serialization() {
+        let notif = JsonRpcNotification {
+            jsonrpc: "2.0".into(),
+            method: "notifications/initialized".into(),
+            params: None,
+        };
+        let json = serde_json::to_string(&notif).unwrap();
+        assert!(json.contains("\"notifications/initialized\""));
+        assert!(!json.contains("params"));
+    }
+
+    // ── Initialize ───────────────────────────────────────────────
+
+    #[test]
+    fn test_initialize_request_serialization() {
+        let req = InitializeRequest {
+            protocol_version: "2024-11-05".into(),
+            capabilities: ClientCapabilities {
+                roots: None,
+                sampling: None,
+                experimental: None,
+            },
+            client_info: ClientInfo {
+                name: "dpronix".into(),
+                version: "0.3.0".into(),
+            },
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"protocolVersion\""));
+        assert!(json.contains("\"clientInfo\""));
+        assert!(json.contains("\"dpronix\""));
+    }
+
+    #[test]
+    fn test_initialize_result_deserialization() {
+        let json_str = r#"{
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {"listChanged": true}
+            },
+            "serverInfo": {
+                "name": "test-server",
+                "version": "1.0.0"
+            }
+        }"#;
+        let result: InitializeResult = serde_json::from_str(json_str).unwrap();
+        assert_eq!(result.protocol_version, "2024-11-05");
+        assert_eq!(result.server_info.name, "test-server");
+        assert!(result.capabilities.tools.is_some());
+        assert!(result.capabilities.resources.is_none());
+    }
+
+    // ── Tools ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_tool_def_deserialization() {
+        let json_str = r#"{
+            "name": "read_file",
+            "description": "Read a file",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}}
+            }
+        }"#;
+        let tool: ToolDef = serde_json::from_str(json_str).unwrap();
+        assert_eq!(tool.name, "read_file");
+        assert_eq!(tool.description.unwrap(), "Read a file");
+    }
+
+    #[test]
+    fn test_call_tool_request_serialization() {
+        let req = CallToolRequest {
+            name: "read_file".into(),
+            arguments: json!({"path": "/tmp/test.txt"}),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"read_file\""));
+        assert!(json.contains("\"/tmp/test.txt\""));
+    }
+
+    #[test]
+    fn test_call_tool_result_deserialization() {
+        let json_str = r#"{
+            "content": [
+                {"type": "text", "text": "hello world"}
+            ],
+            "isError": false
+        }"#;
+        let result: CallToolResult = serde_json::from_str(json_str).unwrap();
+        assert_eq!(result.content.len(), 1);
+        assert_eq!(result.content[0].text.as_deref(), Some("hello world"));
+        assert!(!result.is_error);
+    }
+
+    #[test]
+    fn test_list_tools_result_deserialization() {
+        let json_str = r#"{
+            "tools": [
+                {"name": "tool1", "inputSchema": {"type": "object"}},
+                {"name": "tool2", "description": "desc", "inputSchema": {"type": "object"}}
+            ]
+        }"#;
+        let result: ListToolsResult = serde_json::from_str(json_str).unwrap();
+        assert_eq!(result.tools.len(), 2);
+        assert_eq!(result.tools[0].name, "tool1");
+        assert!(result.tools[0].description.is_none());
+        assert_eq!(result.tools[1].description.as_deref(), Some("desc"));
+    }
+
+    // ── Resources ────────────────────────────────────────────────
+
+    #[test]
+    fn test_resource_def_deserialization() {
+        let json_str = r#"{
+            "uri": "file:///tmp/doc.txt",
+            "name": "doc",
+            "mime_type": "text/plain"
+        }"#;
+        let res: ResourceDef = serde_json::from_str(json_str).unwrap();
+        assert_eq!(res.uri, "file:///tmp/doc.txt");
+        assert_eq!(res.mime_type.as_deref(), Some("text/plain"));
+    }
+
+    #[test]
+    fn test_read_resource_result_deserialization() {
+        let json_str = r#"{
+            "contents": [{"uri": "file:///tmp/doc.txt", "text": "content"}]
+        }"#;
+        let result: ReadResourceResult = serde_json::from_str(json_str).unwrap();
+        assert_eq!(result.contents.len(), 1);
+        assert_eq!(result.contents[0].text.as_deref(), Some("content"));
+    }
+
+    // ── Prompts ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_prompt_def_deserialization() {
+        let json_str = r#"{
+            "name": "review",
+            "description": "Code review prompt",
+            "arguments": [
+                {"name": "code", "description": "code to review", "required": true}
+            ]
+        }"#;
+        let prompt: PromptDef = serde_json::from_str(json_str).unwrap();
+        assert_eq!(prompt.name, "review");
+        let args = prompt.arguments.unwrap();
+        assert_eq!(args.len(), 1);
+        assert!(args[0].required);
+    }
+}

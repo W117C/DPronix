@@ -61,6 +61,37 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all --workspace --exclude dpronix-desktop
 
+  # ── Coverage (Linux only) ────────────────────────────────────
+  coverage:
+    name: cargo llvm-cov
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Generate coverage report
+        run: cargo llvm-cov --workspace --exclude dpronix-desktop --lcov --output-path lcov.info
+      - name: Upload coverage to artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: lcov.info
+          if-no-files-found: warn
+
+  # ── Benchmarks (Linux only) ───────────────────────────────────
+  bench:
+    name: cargo bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo bench --workspace --exclude dpronix-desktop
+
   # ── Docs ──────────────────────────────────────────────────────
   docs:
     name: cargo doc

@@ -18,6 +18,179 @@ pub struct Goal {
     pub criteria: Vec<String>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Goal ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_goal_round_trip_serde() {
+        let goal = Goal {
+            description: "Build a CLI tool in Rust".into(),
+            constraints: vec!["use clap".into(), "async".into()],
+            criteria: vec!["compiles".into(), "tests pass".into()],
+        };
+        let json = serde_json::to_string(&goal).unwrap();
+        let deserialized: Goal = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.description, goal.description);
+        assert_eq!(deserialized.constraints, goal.constraints);
+    }
+
+    // ── Action + ActionStatus ────────────────────────────────────
+
+    #[test]
+    fn test_action_status_equality() {
+        assert_eq!(ActionStatus::Pending, ActionStatus::Pending);
+        assert_eq!(ActionStatus::Completed, ActionStatus::Completed);
+        assert_ne!(ActionStatus::Pending, ActionStatus::Completed);
+        assert!(matches!(
+            ActionStatus::Failed("err".into()),
+            ActionStatus::Failed(_)
+        ));
+    }
+
+    #[test]
+    fn test_action_defaults_to_pending() {
+        let action = Action {
+            id: "act-1".into(),
+            name: "create_file".into(),
+            description: "Create main.rs".into(),
+            preconditions: vec![],
+            effects: vec!["file exists".into()],
+            cost: 1.0,
+            tool: Some("write_file".into()),
+            tool_args: None,
+            delegatable: false,
+            status: ActionStatus::Pending,
+        };
+        assert_eq!(action.status, ActionStatus::Pending);
+    }
+
+    // ── Plan + PlanStatus ────────────────────────────────────────
+
+    #[test]
+    fn test_plan_status_transitions() {
+        // Verify all variants are constructable and partial eq works
+        assert_ne!(PlanStatus::Draft, PlanStatus::Completed);
+    }
+
+    #[test]
+    fn test_plan_with_dependencies() {
+        let goal = Goal {
+            description: "Test plan".into(),
+            constraints: vec![],
+            criteria: vec![],
+        };
+        let mut dependencies = std::collections::HashMap::new();
+        dependencies.insert("act-2".into(), vec!["act-1".into()]);
+        dependencies.insert("act-3".into(), vec!["act-1".into(), "act-2".into()]);
+
+        let plan = Plan {
+            id: "plan-1".into(),
+            goal,
+            actions: vec![],
+            dependencies,
+            status: PlanStatus::Draft,
+            reasoning: None,
+            usage: None,
+        };
+
+        // act-3 depends on act-1 and act-2
+        let deps = plan.dependencies.get("act-3").unwrap();
+        assert_eq!(deps.len(), 2);
+        assert!(deps.contains(&"act-1".to_string()));
+    }
+
+    #[test]
+    fn test_plan_serde_round_trip() {
+        let plan = Plan {
+            id: "plan-1".into(),
+            goal: Goal {
+                description: "goal".into(),
+                constraints: vec![],
+                criteria: vec![],
+            },
+            actions: vec![Action {
+                id: "a1".into(),
+                name: "action-1".into(),
+                description: "desc".into(),
+                preconditions: vec!["cond".into()],
+                effects: vec!["done".into()],
+                cost: 1.0,
+                tool: None,
+                tool_args: None,
+                delegatable: false,
+                status: ActionStatus::Pending,
+            }],
+            dependencies: std::collections::HashMap::new(),
+            status: PlanStatus::Draft,
+            reasoning: Some("thinking...".into()),
+            usage: Some(PlanUsage {
+                prompt_tokens: 100,
+                completion_tokens: 50,
+                cache_hit_tokens: 20,
+                cache_miss_tokens: 80,
+            }),
+        };
+        let json = serde_json::to_string_pretty(&plan).unwrap();
+        let deserialized: Plan = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, "plan-1");
+        assert_eq!(deserialized.actions.len(), 1);
+        assert_eq!(deserialized.usage.unwrap().prompt_tokens, 100);
+    }
+
+    // ── Swarm types ─────────────────────────────────────────────
+
+    #[test]
+    fn test_agent_role_variants() {
+        assert_ne!(AgentRole::Queen, AgentRole::Worker);
+        assert_eq!(AgentRole::Worker, AgentRole::Worker);
+    }
+
+    #[test]
+    fn test_swarm_task_status() {
+        assert_eq!(SwarmTaskStatus::Pending, SwarmTaskStatus::Pending);
+        assert_eq!(
+            SwarmTaskStatus::Failed("x".into()),
+            SwarmTaskStatus::Failed("x".into())
+        );
+        assert_ne!(
+            SwarmTaskStatus::Failed("a".into()),
+            SwarmTaskStatus::Failed("b".into())
+        );
+    }
+
+    #[test]
+    fn test_swarm_message_type() {
+        assert_eq!(
+            SwarmMessageType::TaskAssignment,
+            SwarmMessageType::TaskAssignment
+        );
+        assert_ne!(
+            SwarmMessageType::TaskAssignment,
+            SwarmMessageType::Coordination
+        );
+    }
+
+    #[test]
+    fn test_swarm_task_serde_round_trip() {
+        let task = SwarmTask {
+            id: "task-1".into(),
+            description: "Write unit tests".into(),
+            assigned_to: "worker-1".into(),
+            action_id: "act-1".into(),
+            status: SwarmTaskStatus::InProgress,
+            output: None,
+            reasoning: None,
+        };
+        let json = serde_json::to_string(&task).unwrap();
+        let deserialized: SwarmTask = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, "task-1");
+        assert_eq!(deserialized.status, SwarmTaskStatus::InProgress);
+    }
+}
+
 /// A single action in the GOAP plan.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Action {
