@@ -1,13 +1,11 @@
 /**
- * types.ts — Wire contract matching commands.rs.
- * Mirrors the approach of DeepSeek-DPronix desktop/frontend/src/lib/types.ts
- * but simplified for our Tauri backend.
+ * types.ts — Wire contract matching commands.rs and runner.rs WireEvent.
  */
 
 /** A single event pushed from the Rust backend through a Tauri Channel. */
 export type WireEvent =
   | { kind: "text_delta"; text: string }
-  | { kind: "reasoning_delta"; text: string; signature?: string }
+  | { kind: "reasoning_delta"; text: string; signature: string | null }
   | { kind: "tool_call_start"; id: string; name: string }
   | { kind: "tool_call_delta"; id: string; args_delta: string }
   | { kind: "tool_call_end"; id: string; name: string; arguments: string }
@@ -19,11 +17,13 @@ export type WireEvent =
       total_tokens: number;
       cache_hit_tokens: number;
       cache_miss_tokens: number;
-      session_cache_hit_tokens?: number;
-      session_cache_miss_tokens?: number;
+      reasoning_tokens: number;
+      session_cache_hit_tokens: number;
+      session_cache_miss_tokens: number;
     }
   | { kind: "turn_complete" }
-  | { kind: "done"; text: string; usage?: UsageInfo }
+  | { kind: "approval_request"; id: string; title: string; description: string | null }
+  | { kind: "done"; text: string; usage: UsageInfo | null }
   | { kind: "error"; message: string };
 
 export interface UsageInfo {
@@ -32,6 +32,7 @@ export interface UsageInfo {
   total_tokens: number;
   cache_hit_tokens: number;
   cache_miss_tokens: number;
+  reasoning_tokens: number;
   session_cache_hit_tokens: number;
   session_cache_miss_tokens: number;
 }
@@ -85,7 +86,7 @@ export interface Message {
 export interface ApprovalRequest {
   id: string;
   title: string;
-  description: string;
-  toolName: string;
+  description: string | null;
+  toolName?: string;
   toolArgs?: string;
 }
