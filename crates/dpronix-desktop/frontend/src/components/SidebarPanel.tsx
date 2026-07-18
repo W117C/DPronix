@@ -17,15 +17,15 @@ export default function SidebarPanel({ sessions, onSelectSession, filesSlot, ski
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
 
   return (
-    <div className="sidebar">
-      <div className="tabs" role="tablist">
+    <div className="rx-sidebar">
+      <div className="rx-tabs" role="tablist">
         <button role="tab" aria-selected={activeTab === "sessions"} className={`tab${activeTab === "sessions" ? " active" : ""}`} onClick={() => setActiveTab("sessions")}>Sessions</button>
         <button role="tab" aria-selected={activeTab === "files"} className={`tab${activeTab === "files" ? " active" : ""}`} onClick={() => setActiveTab("files")}>Files</button>
         <button role="tab" aria-selected={activeTab === "skills"} className={`tab${activeTab === "skills" ? " active" : ""}`} onClick={() => setActiveTab("skills")}>Skills</button>
       </div>
 
       {activeTab === "sessions" && (
-        <div className="list">
+        <div className="rx-list">
           {sessions.map((s) => (
             <button key={s.id} className={`list-item${s.active ? " active" : ""}`} onClick={() => onSelectSession?.(s.id)}>{s.title}</button>
           ))}
@@ -33,14 +33,14 @@ export default function SidebarPanel({ sessions, onSelectSession, filesSlot, ski
       )}
 
       {activeTab === "files" && (
-        <div className="list">
-          {filesSlot ?? <p className="empty">Workspace file tree goes here</p>}
+        <div className="rx-list">
+          {filesSlot ?? <p className="rx-empty">Workspace file tree goes here</p>}
         </div>
       )}
 
       {activeTab === "skills" && (
-        <div className="list">
-          {skillsSlot ?? <p className="empty">Skills list goes here</p>}
+        <div className="rx-list">
+          {skillsSlot ?? <p className="rx-empty">Skills list goes here</p>}
         </div>
       )}
     </div>

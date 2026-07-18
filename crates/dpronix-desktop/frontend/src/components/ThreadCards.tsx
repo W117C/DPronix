@@ -6,13 +6,13 @@ import type { ApprovalRequest, ToolCall, PlanStep } from "../types";
 
 export function ApprovalCard({ request, onApprove, onReject }: { request: ApprovalRequest; onApprove: (id: string) => void; onReject: (id: string) => void }) {
   return (
-    <div className="approval-card" role="alert">
-      <p className="label">Needs Confirmation</p>
-      <p className="title">{request.title}</p>
-      {request.description && <p className="description">{request.description}</p>}
-      <div className="actions">
-        <button className="btn" onClick={() => onReject(request.id)}>Reject</button>
-        <button className="btn btn-approve" onClick={() => onApprove(request.id)}>Approve</button>
+    <div className="rx-approval-card" role="alert">
+      <p className="rx-label">Needs Confirmation</p>
+      <p className="rx-title">{request.title}</p>
+      {request.description && <p className="rx-description">{request.description}</p>}
+      <div className="rx-actions">
+        <button className="rx-btn" onClick={() => onReject(request.id)}>Reject</button>
+        <button className="rx-btn rx-btn-approve" onClick={() => onApprove(request.id)}>Approve</button>
       </div>
     </div>
   );
@@ -22,13 +22,13 @@ export function ToolCallCard({ call, defaultOpen }: { call: ToolCall; defaultOpe
   const [open, setOpen] = useState(defaultOpen ?? false);
   const statusIcon = call.status === "running" ? "..." : call.status === "success" ? "\u2713" : "\u2715";
   return (
-    <div className="tool-card">
-      <button className="summary" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <div className="rx-tool-card">
+      <button className="rx-summary" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className={`chevron${open ? " open" : ""}`}>&rsaquo;</span>
-        <span className="command">{call.command}</span>
+        <span className="rx-command">{call.command}</span>
         <span className={`status ${call.status}`}>{statusIcon}</span>
       </button>
-      {open && call.detail && <pre className="detail">{call.detail}</pre>}
+      {open && call.detail && <pre className="rx-detail">{call.detail}</pre>}
     </div>
   );
 }
@@ -36,23 +36,23 @@ export function ToolCallCard({ call, defaultOpen }: { call: ToolCall; defaultOpe
 export function ReasoningDisclosure({ durationSeconds, children }: { durationSeconds?: number; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="reasoning">
-      <button className="summary" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <div className="rx-reasoning">
+      <button className="rx-summary" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className={`chevron${open ? " open" : ""}`}>&rsaquo;</span>
         <span>Reasoning{durationSeconds ? ` (${durationSeconds}s)` : ""}</span>
       </button>
-      {open && <div className="content">{children}</div>}
+      {open && <div className="rx-content">{children}</div>}
     </div>
   );
 }
 
 export function PlanStepsCard({ title, steps }: { title: string; steps: PlanStep[] }) {
   return (
-    <div className="plan-card">
-      <p className="title">{title}</p>
-      <div className="steps">
+    <div className="rx-plan-card">
+      <p className="rx-title">{title}</p>
+      <div className="rx-steps">
         {steps.map((s) => (
-          <div key={s.id} className="step">
+          <div key={s.id} className="rx-step">
             <span className={`icon ${s.status}`}>
               {s.status === "done" ? "\u2713" : s.status === "active" ? "\u25CF" : "\u25CB"}
             </span>

@@ -138,14 +138,14 @@ export default function App() {
         onOpenSettings={() => setShowSettings((v) => !v)}
       />
 
-      <div className={`body${contextCollapsed ? " context-collapsed" : ""}`}>
+      <div className={`rx-body${contextCollapsed ? " rx-context-collapsed" : ""}`}>
         <SidebarPanel
           sessions={sessions}
-          skillsSlot={skills.length > 0 ? skills.map((s) => <button key={s.name} className="list-item" title={s.description}>{s.name}</button>) : undefined}
+          skillsSlot={skills.length > 0 ? skills.map((s) => <button key={s.name} className="rx-list-item" title={s.description}>{s.name}</button>) : undefined}
         />
 
-        <div className="main">
-          <div className="thread">
+        <div className="rx-main">
+          <div className="rx-thread">
             {pendingApproval && (
               <ApprovalCard
                 request={pendingApproval}
@@ -177,24 +177,24 @@ export default function App() {
             )}
 
             {showSettings && (
-              <div className="plan-card"><p className="title">Settings</p>
+              <div className="rx-plan-card"><p className="rx-title">Settings</p>
                 <div style={{ fontSize: 12, color: "var(--rx-text-secondary)", display: "flex", flexDirection: "column", gap: 6 }}>
-                  <label className="list-item" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <label className="rx-list-item" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                     <input type="checkbox" checked={thinkingEnabled} onChange={() => setThinkingEnabled((v: boolean) => !v)} /> Thinking mode
                   </label>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span>Effort:</span>
-                    <select value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)} className="send" style={{ background: "var(--rx-surface-2)", color: "var(--rx-text-primary)", border: "1px solid var(--rx-border)", fontSize: 12, padding: "2px 6px", borderRadius: "var(--rx-radius)", height: "auto" }}>
+                    <select value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)} className="rx-send" style={{ background: "var(--rx-surface-2)", color: "var(--rx-text-primary)", border: "1px solid var(--rx-border)", fontSize: 12, padding: "2px 6px", borderRadius: "var(--rx-radius)", height: "auto" }}>
                       {(capabilities?.reasoning_effort_levels ?? ["low","medium","high"]).map((l: string) => <option key={l} value={l}>{l}</option>)}
                     </select>
                   </div>
-                  <button className="btn" onClick={handleNewSession}>New Session</button>
+                  <button className="rx-btn" onClick={handleNewSession}>New Session</button>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="composer">
+          <div className="rx-composer">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -228,7 +228,7 @@ export default function App() {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); running ? handleCancel() : handleSubmit(); }
               }}
             />
-            <button className="send" aria-label="Send" disabled={!input.trim() && !running} onClick={running ? handleCancel : handleSubmit}>
+            <button className="rx-send" aria-label="Send" disabled={!input.trim() && !running} onClick={running ? handleCancel : handleSubmit}>
               {running ? "\u25A0" : "\u2192"}
             </button>
           </div>
