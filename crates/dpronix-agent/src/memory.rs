@@ -154,6 +154,11 @@ impl Memory {
 
     /// Turn-end compaction: shrink large tool results (Head/Tail Truncation).
     /// Does not summarize the entire log, preserving LLM Prefix Caches.
+    ///
+    /// # P0 Fix: Bounds-checked string slicing with UTF-8 boundary awareness.
+    /// Previously, `head_len` and `tail_len` could exceed `content.len()`, causing a panic.
+    /// Now clamped to valid boundaries and uses floor_char_boundary to avoid splitting
+    /// multi-byte UTF-8 characters.
     pub fn shrink_large_results(&mut self, threshold_chars: usize) {
         for msg in self.messages.iter_mut().rev() {
             if msg.role != Role::Tool {
@@ -169,18 +174,27 @@ impl Memory {
                 continue;
             }
 
-            if msg.content.len() > threshold_chars {
+            let tlen = msg.content.len();
+
+            // P0 FIX: Only truncate if content is actually larger than threshold
+            // and ensure head_len + tail_len never exceeds content length.
+            if tlen > threshold_chars {
                 self.full_results
                     .insert(call_id.clone(), msg.content.clone());
 
-                let head_len = (threshold_chars as f32 * TRUNCATION_HEAD_RATIO) as usize;
-                let tail_len = threshold_chars - head_len;
+                let head_len = ((threshold_chars as f32 * TRUNCATION_HEAD_RATIO) as usize).min(tlen);
+                let tail_len = threshold_chars.saturating_sub(head_len).min(tlen - head_len);
 
-                let tlen = msg.content.len();
-                let head = &msg.content[..head_len];
-                let tail = &msg.content[tlen - tail_len..];
+                // P0 FIX: Use floor_char_boundary to avoid splitting UTF-8 characters
+                let head_end = floor_char_boundary_safe(&msg.content, head_len);
+                let tail_start = tlen.saturating_sub(tail_len);
+                let tail_start = floor_char_boundary_safe_from_end(&msg.content, tail_start);
 
-                let omitted = msg.content.len() - head_len - tail_len;
+                let head = &msg.content[..head_end];
+                let tail = &msg.content[tail_start..];
+
+                let omitted = tlen - head_end - (tlen - tail_start);
+
                 msg.content = format!(
                     "{}\n\n... [{} bytes omitted, use fetch_full_result(\"{}\") to retrieve] ...\n\n{}",
                     head, omitted, call_id, tail
@@ -195,6 +209,10 @@ impl Memory {
     /// Atomic sliding window fallback.
     /// Drops the oldest contiguous "Turn Chunk" (User -> Assistant -> ToolResults)
     /// to avoid breaking provider API tool_use invariants.
+    ///
+    /// # P1 Fix: Preserve tool_call/tool_result pairing.
+    /// Now tracks tool_call_ids in the Assistant message and ensures
+    /// corresponding Tool messages are dropped together.
     pub fn slide_window(&mut self) {
         let mut dropped_ids = Vec::new();
 
@@ -203,12 +221,51 @@ impl Memory {
                 break;
             }
 
+            // P1 FIX: When dropping an Assistant message with tool_calls,
+            // collect all tool_call_ids so we can also drop their Tool results
+            if front.role == Role::Assistant {
+                if let Some(ref tool_calls) = front.tool_calls {
+                    for tc in tool_calls {
+                        dropped_ids.push(tc.id.clone());
+                    }
+                }
+            }
+
+            // Track tool_call_id of Tool messages being dropped
             if let Some(id) = &front.tool_call_id {
                 dropped_ids.push(id.clone());
             }
 
             self.messages.pop_front();
         }
+
+        // P1 FIX: After sliding, check if any remaining Tool messages
+        // have lost their corresponding Assistant tool_call.
+        // If so, drop those orphaned Tool messages too.
+        let remaining_call_ids: HashSet<String> = self
+            .messages
+            .iter()
+            .filter_map(|m| {
+                if m.role == Role::Assistant {
+                    m.tool_calls.as_ref().map(|tcs| {
+                        tcs.iter().map(|tc| tc.id.clone()).collect::<Vec<_>>()
+                    })
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect();
+
+        self.messages.retain(|m| {
+            if m.role == Role::Tool {
+                if let Some(ref id) = m.tool_call_id {
+                    // Keep only if the corresponding Assistant tool_call still exists
+                    return remaining_call_ids.contains(id);
+                }
+            }
+            true
+        });
 
         for id in dropped_ids {
             self.full_results.remove(&id);
@@ -225,4 +282,29 @@ impl Memory {
     fn bump_activity(&mut self) {
         self.last_activity = Some(Instant::now());
     }
+}
+
+/// Find the largest UTF-8 character boundary at or before `max`.
+/// Equivalent to the unstable `str::floor_char_boundary` but works on stable Rust.
+fn floor_char_boundary_safe(s: &str, max: usize) -> usize {
+    if max >= s.len() {
+        return s.len();
+    }
+    let mut idx = max;
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
+/// Find the smallest UTF-8 character boundary at or after `min`.
+fn floor_char_boundary_safe_from_end(s: &str, min: usize) -> usize {
+    if min >= s.len() {
+        return s.len();
+    }
+    let mut idx = min;
+    while idx < s.len() && !s.is_char_boundary(idx) {
+        idx += 1;
+    }
+    idx
 }

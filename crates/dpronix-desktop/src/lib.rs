@@ -35,6 +35,10 @@ use tauri::{
 pub struct AppState {
     pub runner: tokio::sync::Mutex<Option<Box<dyn dpronix_core::Runner + Send>>>,
     pub cancel: tokio::sync::Mutex<Option<tokio_util::sync::CancellationToken>>,
+    /// Channel for delivering approval responses to a waiting agent.
+    pub approval_tx: std::sync::Arc<
+        tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<(String, bool)>>>,
+    >,
     /// Persistent conversation store for the current session. Shared across
     /// successive `submit_prompt` calls so the agent remembers prior turns
     /// (and DeepSeek-V4 reasoning replay spans user turns). Cleared by
@@ -54,6 +58,7 @@ pub fn run() {
         .manage(AppState {
             runner: tokio::sync::Mutex::new(None),
             cancel: tokio::sync::Mutex::new(None),
+            approval_tx: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
             history: std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())),
         })
         .invoke_handler(tauri::generate_handler![
@@ -65,6 +70,11 @@ pub fn run() {
             commands::get_config,
             commands::get_capabilities,
             commands::health_check,
+            commands::respond_approval,
+            commands::get_workspace_files,
+            commands::list_sessions,
+            commands::create_session,
+            commands::delete_session,
         ])
         .setup(|app| {
             // Build system tray

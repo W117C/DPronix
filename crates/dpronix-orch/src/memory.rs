@@ -189,7 +189,10 @@ impl InMemoryVectorStore {
     /// better than raw character n-grams. Splits on whitespace/punctuation,
     /// applies multiple hash projections per word, and uses idf-like weighting.
     /// Falls back when no embedding API is configured.
-    fn text_to_embedding(&self, text: &str) -> Vec<f32> {
+    ///
+    /// # P0 Fix: Now takes `&mut self` and actually writes to the embed_cache.
+    /// Previously used `&self`, so cache entries were computed but never stored.
+    fn text_to_embedding(&mut self, text: &str) -> Vec<f32> {
         if let Some(cached) = self.embed_cache.get(text) {
             return cached.clone();
         }
@@ -249,12 +252,15 @@ impl InMemoryVectorStore {
             }
         }
 
+        // P0 FIX: Actually update the cache
+        self.embed_cache.insert(text.to_string(), embedding.clone());
+
         embedding
     }
 
     /// Compute embedding via the configured API (async).
     /// Returns the embedding vector, or empty vec on failure.
-    pub async fn embed_via_api(&self, text: &str) -> Vec<f32> {
+    pub async fn embed_via_api(&mut self, text: &str) -> Vec<f32> {
         if let Some(cached) = self.embed_cache.get(text) {
             return cached.clone();
         }
@@ -335,11 +341,16 @@ impl VectorStore for InMemoryVectorStore {
 
         if self.records.len() >= self.config.max_records {
             // Remove lowest-importance record
+            // P0 FIX: Replace .unwrap() with .unwrap_or(Equal) to handle NaN importance
             if let Some(min_idx) = self
                 .records
                 .iter()
                 .enumerate()
-                .min_by(|(_, a), (_, b)| a.importance.partial_cmp(&b.importance).unwrap())
+                .min_by(|(_, a), (_, b)| {
+                    a.importance
+                        .partial_cmp(&b.importance)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
                 .map(|(idx, _)| idx)
             {
                 self.records.remove(min_idx);
@@ -380,7 +391,51 @@ impl VectorStore for InMemoryVectorStore {
     }
 
     fn search_by_text(&self, text: &str, top_k: usize) -> Vec<SearchResult> {
-        let embedding = self.text_to_embedding(text);
+        // Use inline embedding calculation (cannot use &mut self on &self method).
+        let dim = self.config.vector_dim;
+        let mut embedding = vec![0.0_f32; dim];
+
+        let text_lower = text.to_lowercase();
+        let words: Vec<&str> = text_lower
+            .split(|c: char| c.is_whitespace() || c.is_ascii_punctuation())
+            .filter(|w| !w.is_empty())
+            .collect();
+
+        if !words.is_empty() {
+            let mut word_counts: HashMap<&str, usize> = HashMap::new();
+            for w in &words {
+                *word_counts.entry(*w).or_insert(0) += 1;
+            }
+            let total = words.len() as f32;
+
+            for (pos, word) in words.iter().enumerate() {
+                let tf = *word_counts.get(word).unwrap_or(&1) as f32 / total;
+                let pos_weight = 1.0 - (pos as f32 / words.len() as f32) * 0.3;
+
+                let h1 = hash_word(word, 0);
+                let h2 = hash_word(word, 1);
+                let h3 = hash_word(word, 2);
+
+                let weight = tf * pos_weight;
+                embedding[(h1 as usize) % dim] += weight;
+                embedding[(h2 as usize) % dim] += weight * 0.7;
+                embedding[(h3 as usize) % dim] += weight * 0.5;
+
+                if pos > 0 {
+                    let bigram = format!("{}_{}", words[pos - 1], word);
+                    let hb = hash_word(&bigram, 0);
+                    embedding[(hb as usize) % dim] += weight * 0.4;
+                }
+            }
+        }
+
+        let magnitude: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if magnitude > 0.0 {
+            for val in embedding.iter_mut() {
+                *val /= magnitude;
+            }
+        }
+
         self.search(&embedding, top_k)
     }
 

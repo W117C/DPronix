@@ -383,6 +383,12 @@ fn truncate_str(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
     } else {
-        format!("{}…", &s[..max])
+        // P0 Fix: Find the largest UTF-8 character boundary at or before max.
+        // `&s[..max]` panics if max splits a multi-byte character.
+        let mut end = max;
+        while end > 0 && !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}…", &s[..end])
     }
 }

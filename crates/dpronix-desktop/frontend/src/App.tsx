@@ -1,14 +1,35 @@
+/**
+ * App — DPronix desktop root.
+ *
+ * Layout: TitleBar → Body(sidebar | main(thread + composer) | context) → StatusBar
+ *
+ * Message flow: messages are stored in arrival order and rendered through
+ * <Transcript> which preserves chronological order (no filter-split).
+ * Streaming state is held in refs to avoid re-render churn.
+ */
 import { useState, useCallback, useRef, useEffect } from "react";
-import { submitPrompt, cancelRun, newSession, listSkills, getCapabilities } from "./bridge";
-import type { Capabilities, SkillSummary, UsageInfo, Message, SessionSummary, AgentStatus, ApprovalRequest, ToolCall, ContextFile } from "./types";
+import { submitPrompt, cancelRun, newSession, listSkills, getCapabilities, respondApproval, getWorkspaceFiles, listSessions, createSession } from "./bridge";
+import type {
+  Capabilities,
+  SkillSummary,
+  UsageInfo,
+  Message,
+  SessionSummary,
+  AgentStatus,
+  ApprovalRequest,
+  ContextFile,
+} from "./types";
 import TitleBar from "./components/TitleBar";
 import SidebarPanel from "./components/SidebarPanel";
-import { ApprovalCard, ToolCallCard, ReasoningDisclosure } from "./components/ThreadCards";
+import Transcript from "./components/Transcript";
 import ContextPanel from "./components/ContextPanel";
 import StatusBar from "./components/StatusBar";
-import MarkdownRenderer from "./components/MarkdownRenderer";
+import Composer from "./components/Composer";
+import SettingsPanel from "./components/SettingsPanel";
 
-function uid() { return (Date.now() + Math.random()).toString(36); }
+function uid() {
+  return (Date.now() + Math.random()).toString(36);
+}
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -18,229 +39,328 @@ export default function App() {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [contextCollapsed, setContextCollapsed] = useState(true);
+  const [sideCollapsed, setSideCollapsed] = useState(false);
   const [lastUsage, setLastUsage] = useState<UsageInfo | null>(null);
   const [sessionCache, setSessionCache] = useState({ hit: 0, miss: 0 });
   const [reasoningEffort, setReasoningEffort] = useState("high");
   const [thinkingEnabled, setThinkingEnabled] = useState(true);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>("ready");
+  const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
+  const [theme, setTheme] = useState<"dark" | "light">(
+    () => (typeof localStorage !== "undefined" && localStorage.getItem("dp-theme") as "dark" | "light") || "dark",
+  );
+
+  // streaming refs — accumulate text without spawning re-renders per token
   const streamingText = useRef("");
   const streamingMsgId = useRef("");
   const streamingReasoning = useRef("");
   const streamingReasoningMsgId = useRef("");
-  // Agent status for StatusBar
-  const [agentStatus, setAgentStatus] = useState<AgentStatus>("ready");
-
-  // Sample sessions + context (wired from backend later)
-  const sessions: SessionSummary[] = [{ id: "1", title: "Current", active: true }];
-  const [contextFiles] = useState<ContextFile[]>([]);
-  const [modifiedFiles] = useState<ContextFile[]>([]);
-  const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
-  const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const promptHistory = useRef<string[]>([]);
   const promptHistoryIdx = useRef(-1);
   const savedDraft = useRef("");
+  const threadEndRef = useRef<HTMLDivElement>(null);
+
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [contextFiles, setContextFiles] = useState<ContextFile[]>([]);
+  const [modifiedFiles] = useState<ContextFile[]>([]);
 
   useEffect(() => {
-    getCapabilities().then((c) => setCapabilities(c as unknown as Capabilities)).catch(console.error);
+    getCapabilities()
+      .then((c) => setCapabilities(c as unknown as Capabilities))
+      .catch(console.error);
     listSkills().then(setSkills).catch(console.error);
+    getWorkspaceFiles()
+      .then((files) =>
+        setContextFiles(files.map((f) => ({ path: f, changeType: undefined }))),
+      )
+      .catch(console.error);
+    listSessions()
+      .then((list) =>
+        setSessions(list.map((s) => ({ id: s.id, title: s.title, active: false }))),
+      )
+      .catch(console.error);
   }, []);
 
+  // Apply theme on mount and on change
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("dp-theme", theme);
+  }, [theme]);
+
   const addMessage = useCallback((msg: Message) => setMessages((p) => [...p, msg]), []);
-  const updateMessage = useCallback((id: string, updater: (m: Message) => Message) => setMessages((p) => p.map((m) => (m.id === id ? updater(m) : m))), []);
+  const updateMessage = useCallback(
+    (id: string, updater: (m: Message) => Message) =>
+      setMessages((p) => p.map((m) => (m.id === id ? updater(m) : m))),
+    [],
+  );
+
+  // auto-scroll thread to bottom on new content
+  useEffect(() => {
+    threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const handleSubmit = useCallback(async () => {
     const prompt = input.trim();
     if (!prompt || running) return;
-    setInput(""); setRunning(true); setAgentStatus("running");
-    streamingText.current = ""; streamingMsgId.current = "";
-    streamingReasoning.current = ""; streamingReasoningMsgId.current = "";
+    setInput("");
+    setRunning(true);
+    setAgentStatus("running");
+    streamingText.current = "";
+    streamingMsgId.current = "";
+    streamingReasoning.current = "";
+    streamingReasoningMsgId.current = "";
     addMessage({ id: uid(), role: "user", content: prompt });
     promptHistory.current.push(prompt);
-    promptHistoryIdx.current = -1; savedDraft.current = "";
+    promptHistoryIdx.current = -1;
+    savedDraft.current = "";
 
     const handlers = {
       onText(text: string) {
+        // close out any open reasoning block
         if (streamingReasoningMsgId.current) {
-          updateMessage(streamingReasoningMsgId.current, (m) => ({ ...m, reasoningDone: true }));
+          updateMessage(streamingReasoningMsgId.current, (m) => ({
+            ...m,
+            reasoningDone: true,
+          }));
           streamingReasoningMsgId.current = "";
         }
         streamingText.current += text;
-        if (!streamingMsgId.current) { streamingMsgId.current = uid(); addMessage({ id: streamingMsgId.current, role: "assistant", content: "" }); }
-        updateMessage(streamingMsgId.current, (m) => ({ ...m, content: streamingText.current }));
+        if (!streamingMsgId.current) {
+          streamingMsgId.current = uid();
+          addMessage({
+            id: streamingMsgId.current,
+            role: "assistant",
+            content: "",
+          });
+        }
+        updateMessage(streamingMsgId.current, (m) => ({
+          ...m,
+          content: streamingText.current,
+        }));
       },
       onReasoning(text: string) {
         streamingReasoning.current += text;
         if (!streamingReasoningMsgId.current) {
           streamingReasoningMsgId.current = uid();
-          addMessage({ id: streamingReasoningMsgId.current, role: "reasoning", content: streamingReasoning.current, reasoningDone: false });
+          addMessage({
+            id: streamingReasoningMsgId.current,
+            role: "reasoning",
+            content: streamingReasoning.current,
+            reasoningDone: false,
+          });
         } else {
-          updateMessage(streamingReasoningMsgId.current, (m) => ({ ...m, content: streamingReasoning.current }));
+          updateMessage(streamingReasoningMsgId.current, (m) => ({
+            ...m,
+            content: streamingReasoning.current,
+          }));
         }
       },
       onToolCallStart(id: string, name: string) {
-        setToolCalls((p) => [...p, { id, command: name, status: "running" }]);
         addMessage({ id, role: "tool", content: "", toolName: name, toolId: id });
       },
       onToolCallDelta(id: string, argsDelta: string) {
-        updateMessage(id, (m) => ({ ...m, content: m.content + argsDelta, toolArgs: (m.toolArgs ?? "") + argsDelta }));
-        setToolCalls((p) => p.map((tc) => tc.id === id ? { ...tc, detail: (tc.detail ?? "") + argsDelta } : tc));
+        updateMessage(id, (m) => ({
+          ...m,
+          content: m.content + argsDelta,
+          toolArgs: (m.toolArgs ?? "") + argsDelta,
+        }));
       },
       onToolCallEnd(id: string, name: string, args_: string) {
-        updateMessage(id, (m) => ({ ...m, toolName: name, content: args_, toolArgs: args_ }));
-        setToolCalls((p) => p.map((tc) => tc.id === id ? { ...tc, status: "success", detail: args_ } : tc));
+        updateMessage(id, (m) => ({
+          ...m,
+          toolName: name,
+          content: args_,
+          toolArgs: args_,
+        }));
       },
       onToolResult(callId: string, result: string) {
         updateMessage(callId, (m) => ({ ...m, toolResult: result }));
-        setToolCalls((p) => p.map((tc) => tc.id === callId ? { ...tc, detail: (tc.detail ?? "") + "\n\nResult: " + result } : tc));
       },
       onUsage(usage: UsageInfo) {
         setLastUsage(usage);
-        setSessionCache((p) => ({ hit: p.hit + usage.cache_hit_tokens, miss: p.miss + usage.cache_miss_tokens }));
+        setSessionCache((p) => ({
+          hit: p.hit + usage.cache_hit_tokens,
+          miss: p.miss + usage.cache_miss_tokens,
+        }));
       },
       onDone(text: string) {
-        if (streamingReasoningMsgId.current) { updateMessage(streamingReasoningMsgId.current, (m) => ({ ...m, reasoningDone: true })); streamingReasoningMsgId.current = ""; }
-        if (text && streamingMsgId.current) { updateMessage(streamingMsgId.current, (m) => ({ ...m, content: text })); }
-        streamingMsgId.current = ""; setRunning(false); setAgentStatus("ready");
+        if (streamingReasoningMsgId.current) {
+          updateMessage(streamingReasoningMsgId.current, (m) => ({
+            ...m,
+            reasoningDone: true,
+          }));
+          streamingReasoningMsgId.current = "";
+        }
+        if (text && streamingMsgId.current) {
+          updateMessage(streamingMsgId.current, (m) => ({ ...m, content: text }));
+        }
+        streamingMsgId.current = "";
+        setRunning(false);
+        setAgentStatus("ready");
+      },
+      onApprovalRequest(request: { id: string; title: string; description?: string }) {
+        setPendingApproval(request);
       },
       onError(message: string) {
         addMessage({ id: uid(), role: "assistant", content: `Error: ${message}` });
-        setRunning(false); setAgentStatus("ready");
+        setRunning(false);
+        setAgentStatus("ready");
       },
     };
 
     try {
-      await submitPrompt({ prompt, reasoning_effort: reasoningEffort, thinking_enabled: thinkingEnabled }, handlers);
+      await submitPrompt(
+        { prompt, reasoning_effort: reasoningEffort, thinking_enabled: thinkingEnabled },
+        handlers,
+      );
     } catch (err) {
       addMessage({ id: uid(), role: "assistant", content: `Error: ${err}` });
-      setRunning(false); setAgentStatus("ready");
+      setRunning(false);
+      setAgentStatus("ready");
     }
-  }, [input, running, addMessage, updateMessage, reasoningEffort, thinkingEnabled]);
+  }, [
+    input,
+    running,
+    addMessage,
+    updateMessage,
+    reasoningEffort,
+    thinkingEnabled,
+  ]);
 
-  const handleCancel = useCallback(async () => { await cancelRun(); setRunning(false); setAgentStatus("ready"); }, []);
+  const handleCancel = useCallback(async () => {
+    await cancelRun();
+    setRunning(false);
+    setAgentStatus("ready");
+  }, []);
 
   const handleNewSession = useCallback(async () => {
     if (running) return;
     await newSession();
-    setMessages([]); setLastUsage(null); setSessionCache({ hit: 0, miss: 0 });
-    setToolCalls([]); setPendingApproval(null);
-    streamingText.current = ""; streamingMsgId.current = "";
-    streamingReasoning.current = ""; streamingReasoningMsgId.current = "";
+    // Create a new session entry on the backend
+    try {
+      await createSession();
+    } catch { /* ignore */ }
+    try {
+      const list = await listSessions();
+      setSessions(list.map((s: any) => ({ id: s.id, title: s.title, active: false })));
+    } catch { /* ignore */ }
+    setMessages([]);
+    setLastUsage(null);
+    setSessionCache({ hit: 0, miss: 0 });
+    setPendingApproval(null);
+    streamingText.current = "";
+    streamingMsgId.current = "";
+    streamingReasoning.current = "";
+    streamingReasoningMsgId.current = "";
   }, [running]);
 
-  const cachePct = sessionCache.hit + sessionCache.miss > 0 ? Math.round(sessionCache.hit / (sessionCache.hit + sessionCache.miss) * 100) : 0;
+  // prompt history navigation (Cmd+Up / Cmd+Down)
+  const handleComposerKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === "ArrowUp") {
+        e.preventDefault();
+        const hist = promptHistory.current;
+        if (hist.length > 0 && promptHistoryIdx.current < hist.length - 1) {
+          if (promptHistoryIdx.current === -1) savedDraft.current = input;
+          promptHistoryIdx.current++;
+          setInput(hist[hist.length - 1 - promptHistoryIdx.current]);
+        }
+        return;
+      }
+      if (mod && e.key === "ArrowDown") {
+        e.preventDefault();
+        if (promptHistoryIdx.current > 0) {
+          promptHistoryIdx.current--;
+          setInput(
+            promptHistory.current[
+              promptHistory.current.length - 1 - promptHistoryIdx.current
+            ],
+          );
+        } else if (promptHistoryIdx.current === 0) {
+          promptHistoryIdx.current = -1;
+          setInput(savedDraft.current);
+        }
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (running) handleCancel();
+        else handleSubmit();
+      }
+    },
+    [input, running, handleSubmit, handleCancel],
+  );
+
+  const cachePct =
+    sessionCache.hit + sessionCache.miss > 0
+      ? Math.round((sessionCache.hit / (sessionCache.hit + sessionCache.miss)) * 100)
+      : 0;
 
   return (
-    <div className="app-shell">
+    <div
+      className="dp-shell"
+      data-ctx-collapsed={contextCollapsed}
+      data-side-collapsed={sideCollapsed}
+    >
       <TitleBar
         title="DPronix"
         thinkingLabel={running ? "thinking" : undefined}
         effort={reasoningEffort}
+        sideCollapsed={sideCollapsed}
+        onToggleSidebar={() => setSideCollapsed((v) => !v)}
         onToggleContext={() => setContextCollapsed((v) => !v)}
         onOpenSettings={() => setShowSettings((v) => !v)}
       />
 
-      <div className={`rx-body${contextCollapsed ? " rx-context-collapsed" : ""}`}>
-        <SidebarPanel
-          sessions={sessions}
-          skillsSlot={skills.length > 0 ? skills.map((s) => <button key={s.name} className="rx-list-item" title={s.description}>{s.name}</button>) : undefined}
-        />
+      <SidebarPanel
+        sessions={sessions}
+        skills={skills}
+        collapsed={sideCollapsed}
+        onNewSession={handleNewSession}
+        running={running}
+        messageCount={messages.length}
+      />
 
-        <div className="rx-main">
-          <div className="rx-thread">
-            {pendingApproval && (
-              <ApprovalCard
-                request={pendingApproval}
-                onApprove={() => setPendingApproval(null)}
-                onReject={() => setPendingApproval(null)}
-              />
-            )}
-
-            {toolCalls.map((tc) => (
-              <ToolCallCard key={tc.id} call={tc} />
-            ))}
-
-            {messages.filter((m) => m.role === "reasoning").map((m) => (
-              <ReasoningDisclosure key={m.id} durationSeconds={m.reasoningDone ? undefined : undefined}>
-                {m.content}
-              </ReasoningDisclosure>
-            ))}
-
-            {messages.filter((m) => m.role === "assistant" && m.content).map((m) => (
-              <div key={m.id}><MarkdownRenderer content={m.content} /></div>
-            ))}
-
-            {messages.filter((m) => m.role === "user").map((m) => (
-              <div key={m.id} style={{ fontSize: 13, lineHeight: 1.72, color: "var(--rx-text-primary)", whiteSpace: "pre-wrap", padding: "8px 12px", background: "var(--rx-surface-1)", borderRadius: "var(--rx-radius-lg)", alignSelf: "flex-end", maxWidth: "82%" }}>{m.content}</div>
-            ))}
-
-            {running && messages.length === 0 && (
-              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--rx-text-muted)", fontSize: 13 }}>DPronix Desktop - DeepSeek-V4 AI agent</div>
-            )}
-
-            {showSettings && (
-              <div className="rx-plan-card"><p className="rx-title">Settings</p>
-                <div style={{ fontSize: 12, color: "var(--rx-text-secondary)", display: "flex", flexDirection: "column", gap: 6 }}>
-                  <label className="rx-list-item" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                    <input type="checkbox" checked={thinkingEnabled} onChange={() => setThinkingEnabled((v: boolean) => !v)} /> Thinking mode
-                  </label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span>Effort:</span>
-                    <select value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)} className="rx-send" style={{ background: "var(--rx-surface-2)", color: "var(--rx-text-primary)", border: "1px solid var(--rx-border)", fontSize: 12, padding: "2px 6px", borderRadius: "var(--rx-radius)", height: "auto" }}>
-                      {(capabilities?.reasoning_effort_levels ?? ["low","medium","high"]).map((l: string) => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </div>
-                  <button className="rx-btn" onClick={handleNewSession}>New Session</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="rx-composer">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              rows={1}
-              placeholder="Continue conversation..."
-              disabled={running}
-              onKeyDown={(e) => {
-                const mod = e.metaKey || e.ctrlKey;
-                // Prompt history: Cmd+Up / Cmd+Down
-                if (mod && e.key === "ArrowUp") {
-                  e.preventDefault();
-                  if (promptHistory.current.length > 0 && promptHistoryIdx.current < promptHistory.current.length - 1) {
-                    if (promptHistoryIdx.current === -1) savedDraft.current = input;
-                    promptHistoryIdx.current++;
-                    setInput(promptHistory.current[promptHistory.current.length - 1 - promptHistoryIdx.current]);
-                  }
-                  return;
-                }
-                if (mod && e.key === "ArrowDown") {
-                  e.preventDefault();
-                  if (promptHistoryIdx.current > 0) {
-                    promptHistoryIdx.current--;
-                    setInput(promptHistory.current[promptHistory.current.length - 1 - promptHistoryIdx.current]);
-                  } else if (promptHistoryIdx.current === 0) {
-                    promptHistoryIdx.current = -1;
-                    setInput(savedDraft.current);
-                  }
-                  return;
-                }
-                // Cmd+L: focus stays (default textarea behavior)
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); running ? handleCancel() : handleSubmit(); }
-              }}
-            />
-            <button className="rx-send" aria-label="Send" disabled={!input.trim() && !running} onClick={running ? handleCancel : handleSubmit}>
-              {running ? "\u25A0" : "\u2192"}
-            </button>
-          </div>
+      <main className="dp-main">
+        <div className="dp-thread">
+          <Transcript
+            messages={messages}
+            running={running}
+            pendingApproval={pendingApproval}
+            onApprove={() => {
+              if (pendingApproval) {
+                respondApproval(pendingApproval.id, true);
+                setPendingApproval(null);
+              }
+            }}
+            onReject={() => {
+              if (pendingApproval) {
+                respondApproval(pendingApproval.id, false);
+                setPendingApproval(null);
+              }
+            }}
+            endRef={threadEndRef}
+          />
         </div>
 
-        <ContextPanel
-          files={contextFiles}
-          modified={modifiedFiles}
-          memoryCount={3}
-          collapsed={contextCollapsed}
+        <Composer
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSubmit}
+          onCancel={handleCancel}
+          onKeyDown={handleComposerKeyDown}
+          running={running}
+          placeholder="Ask anything… (Enter to send, Shift+Enter for new line)"
         />
-      </div>
+      </main>
+
+      <ContextPanel
+        files={contextFiles}
+        modified={modifiedFiles}
+        memoryCount={3}
+        collapsed={contextCollapsed}
+      />
 
       <StatusBar
         tokensUp={lastUsage?.prompt_tokens ?? 0}
@@ -248,6 +368,22 @@ export default function App() {
         cachePercent={cachePct}
         status={agentStatus}
       />
+
+      {showSettings && (
+        <SettingsPanel
+          thinkingEnabled={thinkingEnabled}
+          onToggleThinking={() => setThinkingEnabled((v: boolean) => !v)}
+          effort={reasoningEffort}
+          onEffortChange={setReasoningEffort}
+          effortLevels={
+            capabilities?.reasoning_effort_levels ?? ["low", "medium", "high"]
+          }
+          theme={theme}
+          onThemeChange={setTheme}
+          onNewSession={handleNewSession}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 }

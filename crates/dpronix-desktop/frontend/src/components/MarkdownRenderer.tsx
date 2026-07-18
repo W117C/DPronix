@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 
 /** Inline code */
 function InlineCode({ children }: { children?: React.ReactNode }) {
-  return <code className="md-inline-code">{children}</code>;
+  return <code className="dp-md-inline">{children}</code>;
 }
 
 /** Fenced code block with language label */
@@ -15,8 +15,8 @@ function CodeBlock({ className, children }: { className?: string; children?: Rea
   const lang = className?.replace("language-", "") ?? "";
   const code = String(children).replace(/\n$/, "");
   return (
-    <div className="md-code-block">
-      {lang && <div className="md-code-lang">{lang}</div>}
+    <div className="dp-md-code">
+      {lang && <div className="lang">{lang}</div>}
       <pre><code className={className}>{code}</code></pre>
     </div>
   );
@@ -39,8 +39,10 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   }), []);
 
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-      {content}
-    </ReactMarkdown>
+    <div className="dp-md">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }

@@ -148,6 +148,20 @@ async fn chat(
                         Ok(RunEvent::ToolCallDelta { .. }) => {
                             continue; // accumulated into ToolCallEnd
                         }
+                        Ok(RunEvent::ApprovalRequest {
+                            id,
+                            title,
+                            description,
+                        }) => {
+                            let json = serde_json::json!({
+                                "id": id,
+                                "title": title,
+                                "description": description,
+                            });
+                            Ok(Event::default()
+                                .event("approval_request")
+                                .data(json.to_string()))
+                        }
                         Err(e) => Ok(Event::default().event("error").data(e.to_string())),
                     };
                     if tx.unbounded_send(sse_event).is_err() {

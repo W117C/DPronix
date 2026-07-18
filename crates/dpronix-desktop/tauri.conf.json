@@ -4,7 +4,7 @@
   "version": "0.3.0",
   "identifier": "com.dpronix.desktop",
   "build": {
-    "beforeDevCommand": "cd frontend && npm run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "cd frontend && npm run build",
     "frontendDist": "./frontend/dist"

@@ -268,8 +268,133 @@ pub async fn get_capabilities() -> Result<serde_json::Value, String> {
     }))
 }
 
+/// Respond to an approval request (approve or reject a pending action).
+#[tauri::command]
+pub async fn respond_approval(
+    state: State<'_, AppState>,
+    request_id: String,
+    approved: bool,
+) -> Result<(), String> {
+    info!("respond_approval: id={request_id} approved={approved}");
+    // Forward the response to the agent's approval channel if one exists.
+    let mut approval_tx = state.approval_tx.lock().await;
+    if let Some(tx) = approval_tx.take() {
+        let _ = tx.send((request_id, approved));
+    }
+    Ok(())
+}
+
 /// Health check command.
 #[tauri::command]
 pub async fn health_check() -> Result<String, String> {
     Ok("ok".to_string())
+}
+
+// ── Session persistence ─────────────────────────────────────────
+
+/// A summary of one conversation session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub id: String,
+    pub title: String,
+    pub message_count: usize,
+    pub created_at: String,
+}
+
+/// Helper to load/ save session metadata JSON.
+fn sessions_path() -> std::path::PathBuf {
+    let mut p = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    p.push(".dpronix");
+    p.push("sessions.json");
+    p
+}
+
+fn load_sessions() -> Vec<SessionInfo> {
+    let path = sessions_path();
+    if !path.exists() {
+        return vec![SessionInfo {
+            id: "default".into(),
+            title: "Current Session".into(),
+            message_count: 0,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default(),
+        }];
+    }
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_sessions(sessions: &[SessionInfo]) {
+    let path = sessions_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(sessions).unwrap_or_default());
+}
+
+fn generate_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    format!("s{:x}{:04x}", d.as_secs(), d.subsec_nanos() % 0x10000)
+}
+
+/// List all sessions.
+#[tauri::command]
+pub async fn list_sessions() -> Result<Vec<SessionInfo>, String> {
+    Ok(load_sessions())
+}
+
+/// Create a new session and return its id.
+#[tauri::command]
+pub async fn create_session(title: Option<String>) -> Result<SessionInfo, String> {
+    let mut sessions = load_sessions();
+    let id = generate_id();
+    let session = SessionInfo {
+        id: id.clone(),
+        title: title.unwrap_or_else(|| "Untitled".into()),
+        message_count: 0,
+        created_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs().to_string())
+            .unwrap_or_default(),
+    };
+    sessions.push(session.clone());
+    save_sessions(&sessions);
+    info!("created session {id}");
+    Ok(session)
+}
+
+/// Delete a session by id.
+#[tauri::command]
+pub async fn delete_session(id: String) -> Result<(), String> {
+    let mut sessions = load_sessions();
+    sessions.retain(|s| s.id != id);
+    save_sessions(&sessions);
+    info!("deleted session {id}");
+    Ok(())
+}
+
+/// List top-level workspace files (for the Files tab in sidebar).
+#[tauri::command]
+pub async fn get_workspace_files() -> Result<Vec<String>, String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("cwd error: {e}"))?;
+    let mut entries = Vec::new();
+    let mut dir = tokio::fs::read_dir(&cwd)
+        .await
+        .map_err(|e| format!("read_dir error: {e}"))?;
+    while let Some(entry) = dir.next_entry().await.map_err(|e| format!("entry error: {e}"))? {
+        let path = entry.path();
+        let display = if path.is_dir() {
+            format!("{}/", path.file_name().map(|s| s.to_string_lossy()).unwrap_or_default())
+        } else {
+            path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+        };
+        entries.push(display);
+    }
+    entries.sort();
+    Ok(entries)
 }
