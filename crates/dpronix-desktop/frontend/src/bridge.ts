@@ -194,6 +194,13 @@ export async function cancelRun(): Promise<void> {
   await tauriInvoke("cancel_run");
 }
 
+/** Start a fresh conversation, clearing the backend's persistent history. */
+export async function newSession(): Promise<void> {
+  if (!isTauri()) return;
+  await ensureTauriImports();
+  await tauriInvoke("new_session");
+}
+
 /** List available skills. */
 export async function listSkills(): Promise<SkillSummary[]> {
   if (!isTauri()) return [];

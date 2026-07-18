@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { submitPrompt, cancelRun, listSkills, getCapabilities } from "./bridge";
+import { submitPrompt, cancelRun, newSession, listSkills, getCapabilities } from "./bridge";
 import type { Capabilities, SkillSummary, UsageInfo, Message } from "./types";
 import Transcript from "./components/Transcript";
 import Composer from "./components/Composer";
@@ -128,6 +128,18 @@ export default function App() {
 
   const handleCancel = useCallback(async () => { await cancelRun(); setRunning(false); }, []);
 
+  const handleNewSession = useCallback(async () => {
+    if (running) return;
+    await newSession();
+    setMessages([]);
+    setLastUsage(null);
+    setSessionCache({ hit: 0, miss: 0 });
+    streamingText.current = "";
+    streamingMsgId.current = "";
+    streamingReasoning.current = "";
+    streamingReasoningMsgId.current = "";
+  }, [running]);
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -164,6 +176,11 @@ export default function App() {
           )}
         </div>
         <div className="header-right">
+          <button className="btn-icon" onClick={handleNewSession} disabled={running} title="New session (clear history)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
           <button className={`btn-icon ${showSkills ? "active" : ""}`} onClick={() => setShowSkills(!showSkills)} title="Skills">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>

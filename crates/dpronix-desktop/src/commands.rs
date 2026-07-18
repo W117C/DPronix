@@ -74,7 +74,11 @@ pub async fn submit_prompt(
     // Build agent wired through the composition root
     let mut agent = dpronix_agent::Agent::new(provider.into(), config.agent.max_steps)
         .with_workspace_root(workspace_root)
-        .with_security(security);
+        .with_security(security)
+        // Share the session's persistent conversation store so the agent
+        // carries memory across prompts (multi-turn). This is also what lets
+        // DeepSeek-V4's reasoning_content replay contract span user turns.
+        .with_conversation_history(state.history.clone());
     if let Some(ref sp) = config.agent.system_prompt {
         agent = agent.with_system_prompt(sp.clone());
     }
@@ -169,6 +173,16 @@ pub async fn cancel_run(state: State<'_, AppState>) -> Result<(), String> {
         token.cancel();
         info!("agent run cancelled");
     }
+    Ok(())
+}
+
+/// Start a fresh conversation: clear the persistent history store so the next
+/// prompt begins with no prior context (system prompt re-injected).
+#[tauri::command]
+pub async fn new_session(state: State<'_, AppState>) -> Result<(), String> {
+    let mut history = state.history.lock().await;
+    history.clear();
+    info!("new session started (conversation history cleared)");
     Ok(())
 }
 
