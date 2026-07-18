@@ -24,6 +24,7 @@ export interface EventHandlers {
   onToolResult?: (callId: string, result: string) => void;
   onUsage?: (usage: UsageInfo) => void;
   onTurnComplete?: () => void;
+  onApprovalRequest?: (req: { id: string; title: string; description: string | null }) => void;
   onDone?: (text: string, usage?: UsageInfo) => void;
   onError?: (message: string) => void;
 }
@@ -66,15 +67,23 @@ export async function submitPrompt(
           total_tokens: event.total_tokens,
           cache_hit_tokens: event.cache_hit_tokens,
           cache_miss_tokens: event.cache_miss_tokens,
-          session_cache_hit_tokens: 0,
-          session_cache_miss_tokens: 0,
+          reasoning_tokens: event.reasoning_tokens,
+          session_cache_hit_tokens: event.session_cache_hit_tokens,
+          session_cache_miss_tokens: event.session_cache_miss_tokens,
         });
         break;
       case "turn_complete":
         handlers.onTurnComplete?.();
         break;
+      case "approval_request":
+        handlers.onApprovalRequest?.({
+          id: event.id,
+          title: event.title,
+          description: event.description,
+        });
+        break;
       case "done":
-        handlers.onDone?.(event.text, event.usage);
+        handlers.onDone?.(event.text, event.usage ?? undefined);
         break;
       case "error":
         handlers.onError?.(event.message);
