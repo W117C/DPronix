@@ -134,7 +134,7 @@ impl ResponseUsage {
             .unwrap_or(0)
     }
 
-    /// Map this provider-native usage into the core [`Usage`] accounting type,
+    /// Map this provider-native usage into the core `Usage` accounting type,
     /// preserving every DeepSeek-specific field (context-cache hit/miss and
     /// reasoning tokens). Centralising this mapping keeps the streaming and
     /// non-streaming paths from drifting apart.
