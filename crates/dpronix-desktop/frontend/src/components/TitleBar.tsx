@@ -27,18 +27,18 @@ export default function TitleBar({ title, thinkingLabel, effort, onToggleContext
 
   return (
     <div className="titlebar">
-      <div className="traffic-lights" aria-hidden="true">
-        <span className="dot dot-danger" onClick={handleClose} style={{ cursor: "pointer" }} />
-        <span className="dot dot-warning" onClick={handleMinimize} style={{ cursor: "pointer" }} />
-        <span className="dot dot-success" onClick={handleZoom} style={{ cursor: "pointer" }} />
+      <div className="rx-traffic-lights" aria-hidden="true">
+        <span className="rx-dot rx-dot-danger" onClick={handleClose} style={{ cursor: "pointer" }} />
+        <span className="rx-dot rx-dot-warning" onClick={handleMinimize} style={{ cursor: "pointer" }} />
+        <span className="rx-dot rx-dot-success" onClick={handleZoom} style={{ cursor: "pointer" }} />
       </div>
-      <span className="title">{title}</span>
+      <span className="rx-title">{title}</span>
       {thinkingLabel && (
-        <span className="badge">{thinkingLabel}{effort ? ` \u00b7 effort ${effort}` : ""}</span>
+        <span className="rx-badge">{thinkingLabel}{effort ? ` \u00b7 effort ${effort}` : ""}</span>
       )}
-      <div className="actions">
-        <button className="icon-button" aria-label="Toggle context panel" onClick={onToggleContext}>&#x25A4;</button>
-        <button className="icon-button" aria-label="Open settings" onClick={onOpenSettings}>&#x2699;</button>
+      <div className="rx-actions">
+        <button className="rx-icon-button" aria-label="Toggle context panel" onClick={onToggleContext}>&#x25A4;</button>
+        <button className="rx-icon-button" aria-label="Open settings" onClick={onOpenSettings}>&#x2699;</button>
       </div>
     </div>
   );
