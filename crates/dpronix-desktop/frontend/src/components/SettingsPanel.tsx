@@ -1,90 +1,93 @@
-import { useEffect, useState } from "react";
-import { listProviders, getConfig } from "../bridge";
-import type { Capabilities, ProviderSummary } from "../types";
-
+/**
+ * SettingsPanel — floating overlay for thinking toggle, effort, new session.
+ *
+ * Extracted from the old App.tsx inline settings div that was wedged into
+ * the message stream. Now a proper overlay with dp-* classes.
+ */
 interface SettingsPanelProps {
-  capabilities: Capabilities | null;
+  thinkingEnabled: boolean;
+  onToggleThinking: () => void;
+  effort: string;
+  onEffortChange: (v: string) => void;
+  effortLevels: string[];
+  theme: "dark" | "light";
+  onThemeChange: (theme: "dark" | "light") => void;
+  onNewSession: () => void;
   onClose: () => void;
 }
 
-/**
- * Settings & provider configuration panel.
- *
- * Surfaces the backend-resolved configuration that was previously only
- * reachable through the `list_providers` / `get_config` commands: the
- * configured LLM providers, the agent's DeepSeek-V4 capability flags, and
- * the raw effective config (read-only). This is the desktop counterpart of
- * `dpronix config show`.
- */
-export default function SettingsPanel({ capabilities, onClose }: SettingsPanelProps) {
-  const [providers, setProviders] = useState<ProviderSummary[]>([]);
-  const [configJson, setConfigJson] = useState<string>("");
-  const [showRaw, setShowRaw] = useState(false);
-
-  useEffect(() => {
-    listProviders().then(setProviders).catch(console.error);
-    getConfig().then(setConfigJson).catch(console.error);
-  }, []);
-
-  const caps: Array<[string, boolean | number | string]> = capabilities
-    ? [
-        ["thinking", capabilities.supports_thinking],
-        ["reasoning_effort", capabilities.supports_reasoning_effort],
-        ["tools", capabilities.supports_tools],
-        ["mcp", capabilities.supports_mcp],
-        ["images", capabilities.supports_images],
-        ["max_steps", capabilities.max_steps_default],
-      ]
-    : [];
-
+export default function SettingsPanel({
+  thinkingEnabled,
+  onToggleThinking,
+  effort,
+  onEffortChange,
+  effortLevels,
+  theme,
+  onThemeChange,
+  onNewSession,
+  onClose,
+}: SettingsPanelProps) {
   return (
-    <div className="skills-panel">
-      <div className="skills-panel-header">
-        <h3>Settings &amp; Providers</h3>
-        <button className="btn-icon-small" onClick={onClose}>✕</button>
-      </div>
+    <>
+      {/* click-away backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 90,
+        }}
+        aria-hidden="true"
+      />
+      <div className="dp-settings" role="dialog" aria-label="Settings">
+        <p className="title">Settings</p>
 
-      {/* Providers */}
-      {providers.length === 0 && (
-        <p className="muted">No providers configured. Edit dpronix.toml to add one.</p>
-      )}
-      {providers.map((p) => (
-        <div key={p.name} className="skill-card">
-          <strong>{p.name}</strong> <span className="tag">{p.kind}</span>
-          <div className="skill-tags">
-            {p.model && <span className="tag" title="model">{p.model}</span>}
-            {p.base_url && <span className="tag" title="base_url">{p.base_url}</span>}
-          </div>
+        <div className="field">
+          <span className="lbl">Thinking mode</span>
+          <button
+            className="toggle"
+            data-on={thinkingEnabled}
+            onClick={onToggleThinking}
+            aria-label="Toggle thinking mode"
+          />
         </div>
-      ))}
 
-      {/* Capabilities */}
-      {caps.length > 0 && (
-        <div className="skill-card">
-          <strong>Capabilities</strong>
-          <div className="skill-tags">
-            {caps.map(([k, v]) => (
-              <span key={k} className="tag" title={String(v)}>
-                {k}: {typeof v === "boolean" ? (v ? "✓" : "✗") : v}
-              </span>
+        <div className="field">
+          <span className="lbl">Effort</span>
+          <select value={effort} onChange={(e) => onEffortChange(e.target.value)}>
+            {effortLevels.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <span className="lbl">Theme</span>
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["dark", "light"] as const).map((t) => (
+              <button
+                key={t}
+                className={`dp-btn${theme === t ? " primary" : ""}`}
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => onThemeChange(t)}
+              >
+                {t === "dark" ? "Dark" : "Light"}
+              </button>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Raw effective config (read-only) */}
-      {configJson && (
-        <div className="skill-card">
-          <button className="btn-icon-small" onClick={() => setShowRaw(!showRaw)}>
-            {showRaw ? "▼" : "▶"} raw config
+        <div className="footer">
+          <button className="dp-btn" onClick={onNewSession}>
+            New Session
           </button>
-          {showRaw && (
-            <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, marginTop: 6, maxHeight: 220, overflow: "auto" }}>
-              {configJson}
-            </pre>
-          )}
+          <button className="dp-btn primary" onClick={onClose}>
+            Done
+          </button>
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }

@@ -71,7 +71,7 @@ impl Tool for ReadFileTool {
 
         // Return content with snippet marker for edit validation
         Ok(format!(
-            "{}\n\n[SNIPPED ID: {}]\n[Snippet generated from: {}]\n",
+            "{}\n\n[SNIPPET ID: {}]\n[Snippet generated from: {}]\n",
             content.trim_end(),
             snippet_id,
             path.display()
@@ -271,7 +271,7 @@ impl Tool for EditFileTool {
             let tracker = crate::snippet::global_tracker().lock().await;
             if let Err(current) = tracker.validate(&snip_id, &original) {
                 drop(tracker);
-                return Ok(format!("SNIPPED STALE: The file has changed since you read it.\nCurrent content:\n---\n{}\n---\nPlease re-read the file first.", current));
+                return Ok(format!("SNIPPET STALE: The file has changed since you read it.\nCurrent content:\n---\n{}\n---\nPlease re-read the file first.", current));
             }
             drop(tracker);
         }

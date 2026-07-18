@@ -81,7 +81,7 @@ async fn read_file_returns_content() {
         .unwrap();
 
     assert!(result.contains("world"), "should contain file content");
-    assert!(result.contains("[SNIPPED ID:"), "should include snippet id");
+    assert!(result.contains("[SNIPPET ID:"), "should include snippet id");
 }
 
 #[tokio::test]
@@ -169,7 +169,7 @@ async fn edit_file_replaces_text() {
     // Extract snippet_id from the read result: ends with "[SNIPPED ID: snip_xxx]"
     let snippet_id = read_result
         .lines()
-        .find_map(|l| l.strip_prefix("[SNIPPED ID: "))
+        .find_map(|l| l.strip_prefix("[SNIPPET ID: "))
         .and_then(|s| s.strip_suffix(']'))
         .unwrap_or("snip_missing");
 

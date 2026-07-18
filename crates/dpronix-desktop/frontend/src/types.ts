@@ -22,6 +22,7 @@ export type WireEvent =
       reasoning_tokens: number;
     }
   | { kind: "turn_complete" }
+  | { kind: "approval_request"; id: string; title: string; description?: string }
   | { kind: "done"; text: string; usage?: UsageInfo }
   | { kind: "error"; message: string };
 

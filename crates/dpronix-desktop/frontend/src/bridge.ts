@@ -41,6 +41,7 @@ export interface EventHandlers {
   onToolResult?: (callId: string, result: string) => void;
   onUsage?: (usage: UsageInfo) => void;
   onTurnComplete?: () => void;
+  onApprovalRequest?: (request: { id: string; title: string; description?: string }) => void;
   onDone?: (text: string, usage?: UsageInfo) => void;
   onError?: (message: string) => void;
 }
@@ -186,6 +187,9 @@ export async function submitPrompt(
       case "turn_complete":
         handlers.onTurnComplete?.();
         break;
+      case "approval_request":
+        handlers.onApprovalRequest?.({ id: event.id, title: event.title, description: event.description });
+        break;
       case "done":
         handlers.onDone?.(event.text, event.usage);
         break;
@@ -256,4 +260,48 @@ export async function healthCheck(): Promise<string> {
   if (!isTauri()) return "dev-mock";
   await ensureTauriImports();
   return await tauriInvoke("health_check");
+}
+
+/** Respond to an approval request. */
+export async function respondApproval(requestId: string, approved: boolean): Promise<void> {
+  if (!isTauri()) return;
+  await ensureTauriImports();
+  await tauriInvoke("respond_approval", { requestId, approved });
+}
+
+/** List workspace files for the Files tab. */
+export async function getWorkspaceFiles(): Promise<string[]> {
+  if (!isTauri()) return [];
+  await ensureTauriImports();
+  return await tauriInvoke("get_workspace_files");
+}
+
+// ── Session persistence ───────────────────────────────────
+
+export interface SessionInfo {
+  id: string;
+  title: string;
+  message_count: number;
+  created_at: string;
+}
+
+/** List all conversation sessions. */
+export async function listSessions(): Promise<SessionInfo[]> {
+  if (!isTauri()) return [{ id: "default", title: "Current Session", message_count: 0, created_at: "" }];
+  await ensureTauriImports();
+  return await tauriInvoke("list_sessions");
+}
+
+/** Create a new session. */
+export async function createSession(title?: string): Promise<SessionInfo> {
+  if (!isTauri()) return { id: "dev", title: title ?? "Untitled", message_count: 0, created_at: "" };
+  await ensureTauriImports();
+  return await tauriInvoke("create_session", { title });
+}
+
+/** Delete a session by id. */
+export async function deleteSession(id: string): Promise<void> {
+  if (!isTauri()) return;
+  await ensureTauriImports();
+  await tauriInvoke("delete_session", { id });
 }

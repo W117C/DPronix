@@ -85,11 +85,21 @@ impl Default for ToolRegistry {
 }
 
 // ---------------------------------------------------------------------------
-// Provider Registry (thin — ProviderManager does heavy lifting)
+// Provider Registry
 // ---------------------------------------------------------------------------
 
-pub type ProviderFactory =
-    fn(crate::config::ProviderConfigData) -> anyhow::Result<Arc<dyn crate::runner::Runner>>;
+/// P2 Fix #12: ProviderFactory uses Box<dyn Fn> instead of fn pointer
+/// to allow closures with captured state (e.g. for provider configuration).
+pub type ProviderFactory = Box<dyn Fn(ProviderConfigData) -> anyhow::Result<Arc<dyn crate::runner::Runner>> + Send + Sync>;
+
+#[derive(Debug, Clone)]
+pub struct ProviderConfigData {
+    pub name: String,
+    pub kind: String,
+    pub base_url: Option<String>,
+    pub model: Option<String>,
+    pub api_key_env: Option<String>,
+}
 
 pub struct ProviderRegistry {
     factories: IndexMap<String, ProviderFactory>,
@@ -105,17 +115,10 @@ impl ProviderRegistry {
     pub fn register(&mut self, kind: impl Into<String>, factory: ProviderFactory) {
         self.factories.insert(kind.into(), factory);
     }
-}
 
-/// Placeholder types for config — will be replaced by dpronix-config structs.
-pub mod config {
-    #[derive(Debug, Clone)]
-    pub struct ProviderConfigData {
-        pub name: String,
-        pub kind: String,
-        pub base_url: Option<String>,
-        pub model: Option<String>,
-        pub api_key_env: Option<String>,
+    /// P2 Fix #12: Added lookup method for ProviderRegistry.
+    pub fn lookup(&self, kind: &str) -> Option<&ProviderFactory> {
+        self.factories.get(kind)
     }
 }
 

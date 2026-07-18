@@ -89,6 +89,11 @@ pub enum RunEvent {
     },
     Usage(Usage),
     TurnComplete,
+    ApprovalRequest {
+        id: String,
+        title: String,
+        description: Option<String>,
+    },
     Done(RunOutput),
 }
 
@@ -139,6 +144,11 @@ pub enum WireEvent {
         session_cache_miss_tokens: u32,
     },
     TurnComplete,
+    ApprovalRequest {
+        id: String,
+        title: String,
+        description: Option<String>,
+    },
     Done {
         text: String,
         usage: Option<WireUsageInfo>,
@@ -211,6 +221,15 @@ impl From<RunEvent> for WireEvent {
                 }
             }
             RunEvent::TurnComplete => WireEvent::TurnComplete,
+            RunEvent::ApprovalRequest {
+                id,
+                title,
+                description,
+            } => WireEvent::ApprovalRequest {
+                id,
+                title,
+                description,
+            },
             RunEvent::Done(output) => WireEvent::Done {
                 text: output.text,
                 usage: output.usage.map(|u| u.into()),

@@ -1,14 +1,8 @@
 /**
  * CodeViewer — Lazy-loadable code viewer component.
  *
- * Default implementation renders code in a <pre><code> block.
- * Can be swapped to Monaco/CodeMirror by changing the lazy import.
- *
- * Usage:
- *   const CodeViewer = React.lazy(() => import("./components/editors/CodeViewer"));
- *   <React.Suspense fallback={<pre>loading editor...</pre>}>
- *     <CodeViewer code="..." language="rust" />
- *   </React.Suspense>
+ * Uses dp-* CSS variables instead of hardcoded dark-mode colors,
+ * so it automatically adapts to light/dark themes.
  */
 
 import React from "react";
@@ -19,24 +13,23 @@ interface CodeViewerProps {
   maxHeight?: string;
 }
 
-const CodeViewer: React.FC<CodeViewerProps> = ({ code, maxHeight }) => {
-  const style: React.CSSProperties = {
-    margin: 0,
-    padding: "12px",
-    background: "#1e1e1e",
-    color: "#d4d4d4",
-    borderRadius: "6px",
-    fontSize: "13px",
-    lineHeight: 1.5,
-    overflow: "auto",
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-all",
-    fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
-    ...(maxHeight ? { maxHeight } : {}),
-  };
+const style: React.CSSProperties = {
+  margin: 0,
+  padding: "12px",
+  background: "var(--dp-panel)",
+  color: "var(--dp-fg)",
+  borderRadius: "var(--dp-radius-sm)",
+  fontSize: "13px",
+  lineHeight: 1.5,
+  overflow: "auto",
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-all",
+  fontFamily: "var(--dp-font-mono)",
+};
 
+const CodeViewer: React.FC<CodeViewerProps> = ({ code, maxHeight }) => {
   return (
-    <pre style={style}>
+    <pre style={{ ...style, ...(maxHeight ? { maxHeight } : {}) }}>
       <code>{code}</code>
     </pre>
   );

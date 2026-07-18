@@ -1379,6 +1379,7 @@ dependencies = [
  "dpronix-event",
  "dpronix-provider",
  "dpronix-tools",
+ "rand",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
