@@ -1,6 +1,79 @@
+# DPronix Configuration — dpronix.toml
+# Place in project root or ~/.dpronix/config.toml
+# DeepSeek-V4 is the default provider with thinking mode enabled by default.
+
+# ── Providers ──────────────────────────────────────────────────
+# At least one provider is required. Defaults are DeepSeek-optimized.
 [[providers]]
-name = "deepseek-flash"
+name = "deepseek"
 kind = "openai"
 base_url = "https://api.deepseek.com"
-model = "deepseek-chat"
+model = "deepseek-v4-flash"
 api_key_env = "DEEPSEEK_API_KEY"
+# reasoning_effort = "high"   # "low" | "medium" | "high" | "max" (default: high)
+# thinking_enabled = true     # always on for DeepSeek providers
+# timeout_secs = 120
+# max_retries = 3
+
+# ── Models ─────────────────────────────────────────────────────
+# Optional: alias-friendly model names that map to specific providers.
+# [[models]]
+# name = "deepseek-pro"
+# provider = "deepseek"
+# model = "deepseek-v4-flash"
+
+# ── Agent ──────────────────────────────────────────────────────
+[agent]
+max_steps = 25
+# system_prompt = "You are a helpful software engineer."
+# compaction_threshold = 32000   # tokens before memory compaction
+# pinned_messages = 4            # keep N most recent messages during compaction
+
+# ── Tools ──────────────────────────────────────────────────────
+# [tools]
+# sandbox = true
+# allowed_dirs = ["src/", "tests/"]
+# read_only = false
+
+# ── Permissions ────────────────────────────────────────────────
+# [permissions]
+# default_mode = "ask"           # "allow" | "ask" | "deny"
+# auto_allow_tools = ["read_file", "ls", "glob", "grep"]
+#
+# [[permissions.rules]]
+# tool = "shell"
+# mode = "ask"
+# [[permissions.rules]]
+# tool = "write_file"
+# mode = "ask"
+# allowed_dirs = ["src/", "tests/"]
+
+# ── Security ───────────────────────────────────────────────────
+# [security]
+# disabled_capabilities = ["command_execute", "network_access"]
+# allowed_paths = ["/data/build"]
+# denied_paths = ["/data/build/secrets"]
+# allowed_commands = ["git", "cargo"]
+# allowed_domains = ["api.github.com"]
+#
+# [security.limits]
+# max_files = 100
+# max_file_size = 1048576         # 1 MB
+# max_total_read_bytes = 52428800 # 50 MB
+# max_execution_time_secs = 60
+# max_output_bytes = 10485760     # 10 MB
+# max_tool_calls = 50
+
+# ── MCP Servers ────────────────────────────────────────────────
+# [[mcp_servers]]
+# name = "filesystem"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/dir"]
+
+# ── Memory / Vector Store ──────────────────────────────────────
+# [memory]
+# vector_dim = 256
+# max_records = 10000
+# similarity_threshold = 0.6
+# persist = false
+# persistence_path = ".dpronix/memory.json"
