@@ -120,6 +120,11 @@ impl OpenAIProvider {
             "messages": messages,
             "stream": stream,
         });
+        // Ask DeepSeek to include usage statistics (cache hit/miss tokens +
+        // reasoning tokens) in the final streaming chunk.
+        if stream {
+            req["stream_options"] = serde_json::json!({"include_usage": true});
+        }
         if let Some(tools) = self.build_tools(tools) {
             req["tools"] = serde_json::json!(tools);
         }
