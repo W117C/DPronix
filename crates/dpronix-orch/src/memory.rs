@@ -82,7 +82,7 @@ pub struct MemoryConfig {
 /// Supports DeepSeek-aligned providers and standard OpenAI endpoints.
 #[derive(Debug, Clone)]
 pub struct EmbeddingApiConfig {
-    /// Base URL (e.g. https://api.openai.com/v1).
+    /// Base URL (e.g. <https://api.openai.com/v1>).
     pub base_url: String,
     /// Embedding model name (e.g. text-embedding-3-small).
     pub model: String,
