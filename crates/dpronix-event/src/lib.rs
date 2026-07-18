@@ -1,3 +1,9 @@
+//! # Event — Agent lifecycle event bus
+//!
+//! Defines event types emitted throughout the agent's lifecycle
+//! (tool calls, model responses, errors) and provides a pub-sub bus
+//! for observers.
+
 use dpronix_core::chunk::{Chunk, Usage};
 use dpronix_core::graph::{NodeId, NodeOutput};
 use serde::{Deserialize, Serialize};

@@ -4,9 +4,10 @@ use dpronix_core::tool::ToolContext;
 use dpronix_core::types::{FunctionCall, ToolCall};
 use dpronix_core::{Message, Role, RunEvent, RunEventStream, RunInput, RunOutput, Runner, Tool};
 use dpronix_provider::Provider;
+use dpronix_security::context::SecurityContext;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::signal;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
@@ -24,9 +25,23 @@ pub struct Agent {
     tools: HashMap<String, Arc<dyn Tool>>,
     max_steps: usize,
     system_prompt: Option<String>,
-    reasoning_effort: Option<String>,
-    thinking_enabled: Option<bool>,
+    /// Workspace root used to confine filesystem tool calls. Defaults to the
+    /// process working directory at construction time.
+    workspace_root: PathBuf,
+    /// Security context injected into every ToolContext. Defaults to the
+    /// safe-defaults policy (all builtin capabilities granted).
+    security: SecurityContext,
+
     compaction_threshold_tokens: Option<u32>,
+
+    /// Optional persistent conversation store. When set, each `run_stream`
+    /// seeds its working memory from this store at the start and writes the
+    /// full conversation back at the end, giving the agent multi-turn memory
+    /// across separate `run_stream` invocations. This is what enables desktop
+    /// / CLI sessions to carry context — and crucially, it lets DeepSeek-V4's
+    /// `reasoning_content` replay contract span user turns, not just the
+    /// tool-loop within a single run.
+    history: Option<Arc<tokio::sync::Mutex<Vec<Message>>>>,
 }
 
 impl Agent {
@@ -36,9 +51,11 @@ impl Agent {
             tools: HashMap::new(),
             max_steps: if max_steps == 0 { 10 } else { max_steps },
             system_prompt: None,
-            reasoning_effort: None,
-            thinking_enabled: None,
+            workspace_root: std::env::current_dir().unwrap_or_default(),
+            security: SecurityContext::with_safe_defaults(),
+
             compaction_threshold_tokens: None,
+            history: None,
         }
     }
 
@@ -47,20 +64,33 @@ impl Agent {
         self
     }
 
-    /// Set the reasoning effort level (e.g. "low", "medium", "high", "max").
-    pub fn with_reasoning_effort(mut self, effort: impl Into<String>) -> Self {
-        self.reasoning_effort = Some(effort.into());
-        self
-    }
-
-    /// Enable or disable thinking mode.
-    pub fn with_thinking_enabled(mut self, enabled: bool) -> Self {
-        self.thinking_enabled = Some(enabled);
-        self
-    }
-
     pub fn with_compaction_threshold(mut self, tokens: Option<u32>) -> Self {
         self.compaction_threshold_tokens = tokens;
+        self
+    }
+
+    /// Attach a persistent conversation store so this agent carries memory
+    /// across successive `run_stream` calls. Callers share one
+    /// `Arc<Mutex<Vec<Message>>>` across turns (and reset it to start a new
+    /// session). When the store is non-empty at run start, the system prompt
+    /// is *not* re-injected — the prior turns already contain it.
+    pub fn with_conversation_history(
+        mut self,
+        history: Arc<tokio::sync::Mutex<Vec<Message>>>,
+    ) -> Self {
+        self.history = Some(history);
+        self
+    }
+
+    /// Override the workspace root used to confine filesystem tool calls.
+    pub fn with_workspace_root(mut self, workspace_root: PathBuf) -> Self {
+        self.workspace_root = workspace_root;
+        self
+    }
+
+    /// Override the security context injected into every tool execution.
+    pub fn with_security(mut self, security: SecurityContext) -> Self {
+        self.security = security;
         self
     }
 
@@ -80,28 +110,15 @@ impl Runner for Agent {
         let max_steps = self.max_steps;
         let system_prompt = self.system_prompt.clone();
         let compaction_threshold = self.compaction_threshold_tokens;
-
-        let mut memory = Memory::new();
-
-        // Inject system prompt if configured
-        if let Some(ref sp) = system_prompt {
-            memory.add_message(Message {
-                role: Role::System,
-                content: sp.clone(),
-                name: None,
-                tool_calls: None,
-                tool_call_id: None,
-                reasoning_content: None,
-            });
-        }
+        let workspace_root = self.workspace_root.clone();
+        let security = self.security.clone();
+        let history = self.history.clone();
 
         // Create a cancellation token and wire Ctrl-C (SIGINT) to cancel it.
         // This enables graceful interruption of the agent loop (e.g. Ctrl-C).
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
-        // Signal handler: listens for Ctrl-C and cancels the agent.
-        // Fire-and-forget by design — cancelled when agent completes.
-        let _signal_handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = tokio::signal::ctrl_c() => {
@@ -115,7 +132,39 @@ impl Runner for Agent {
         });
 
         tokio::spawn(async move {
-            if let Err(e) = run_agent_loop(
+            let mut memory = Memory::new();
+
+            // Seed working memory from the persistent conversation store, if
+            // one is attached. This is what makes the agent remember prior
+            // user turns (and preserves DeepSeek-V4 reasoning_content across
+            // turns for the must_replay contract).
+            let seeded = if let Some(ref hist) = history {
+                let prior = hist.lock().await;
+                for m in prior.iter() {
+                    memory.add_message(m.clone());
+                }
+                !prior.is_empty()
+            } else {
+                false
+            };
+
+            // Inject the system prompt only on a fresh conversation. When the
+            // store already holds prior turns, the system prompt is part of
+            // them and re-injecting it would duplicate it.
+            if !seeded {
+                if let Some(ref sp) = system_prompt {
+                    memory.add_message(Message {
+                        role: Role::System,
+                        content: sp.clone(),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                        reasoning_content: None,
+                    });
+                }
+            }
+
+            let result = run_agent_loop(
                 provider,
                 tools,
                 max_steps,
@@ -124,9 +173,21 @@ impl Runner for Agent {
                 input,
                 &tx,
                 &cancel,
+                workspace_root,
+                security,
             )
-            .await
-            {
+            .await;
+
+            // Persist the full conversation back to the store so the next
+            // run_stream call resumes with this context. We write back even
+            // on error so partial progress (and any must_replay reasoning) is
+            // not silently lost between turns.
+            if let Some(ref hist) = history {
+                let mut store = hist.lock().await;
+                *store = memory.get_all();
+            }
+
+            if let Err(e) = result {
                 warn!("agent loop error: {e}");
                 let _ = tx.send(Err(e)).await;
             }
@@ -157,8 +218,9 @@ async fn run_agent_loop(
     input: RunInput,
     tx: &mpsc::Sender<anyhow::Result<RunEvent>>,
     cancel: &CancellationToken,
+    workspace_root: PathBuf,
+    security: SecurityContext,
 ) -> anyhow::Result<()> {
-
     // Add user prompt
     memory.add_message(Message {
         role: Role::User,
@@ -219,6 +281,8 @@ async fn run_agent_loop(
             memory,
             tx,
             cancel,
+            &workspace_root,
+            &security,
         )
         .await?;
 
@@ -266,12 +330,28 @@ async fn stream_and_process_turn(
     memory: &mut Memory,
     tx: &mpsc::Sender<anyhow::Result<RunEvent>>,
     cancel: &CancellationToken,
+    workspace_root: &std::path::Path,
+    security: &SecurityContext,
 ) -> anyhow::Result<StepOutcome> {
     // Build tool refs for provider
     let tool_refs: Vec<&dyn Tool> = tools.iter().map(|t| t.as_ref()).collect();
     let messages = memory.get_all();
 
-    let mut stream = provider.stream(&messages, &tool_refs).await?;
+    // DeepSeek V4 protocol — ValidatedRequest::new fails early with
+    // structured violation list, preventing corrupt messages from
+    // ever reaching the provider
+    let validated =
+        dpronix_provider::ValidatedRequest::new(&messages, &tool_refs).map_err(|violations| {
+            for v in &violations {
+                tracing::error!(?v, "replay invariant violation before provider call");
+            }
+            anyhow::anyhow!(
+                "history replay invariant violated: {} violation(s) detected",
+                violations.len()
+            )
+        })?;
+
+    let mut stream = provider.stream(validated).await?;
 
     let mut text_buf = String::new();
     let mut reasoning_buf = String::new();
@@ -307,9 +387,7 @@ async fn stream_and_process_turn(
                     name: name.clone(),
                     arguments: String::new(),
                 });
-                tx.send(Ok(RunEvent::ToolCallStart { id, name }))
-                    .await
-                    .ok();
+                tx.send(Ok(RunEvent::ToolCallStart { id, name })).await.ok();
             }
             Chunk::ToolCallDelta { id, args_delta } => {
                 // Accumulate arguments into the matching pending call
@@ -320,7 +398,11 @@ async fn stream_and_process_turn(
                     .await
                     .ok();
             }
-            Chunk::ToolCallEnd { id, name, arguments } => {
+            Chunk::ToolCallEnd {
+                id,
+                name,
+                arguments,
+            } => {
                 // If we already accumulated from deltas, merge; otherwise use the complete args
                 if let Some(call) = pending_calls.iter_mut().find(|c| c.id == id) {
                     if !arguments.is_empty() && call.arguments.is_empty() {
@@ -333,9 +415,13 @@ async fn stream_and_process_turn(
                         arguments: arguments.clone(),
                     });
                 }
-                tx.send(Ok(RunEvent::ToolCallEnd { id, name, arguments }))
-                    .await
-                    .ok();
+                tx.send(Ok(RunEvent::ToolCallEnd {
+                    id,
+                    name,
+                    arguments,
+                }))
+                .await
+                .ok();
             }
             Chunk::Usage(u) => {
                 tx.send(Ok(RunEvent::Usage(u.clone()))).await.ok();
@@ -420,7 +506,9 @@ async fn stream_and_process_turn(
                 break;
             }
 
-            let ctx = ToolContext::with_cancellation(&call.id, cancel.child_token());
+            let ctx = ToolContext::with_cancellation(&call.id, cancel.child_token())
+                .with_workspace(workspace_root.to_path_buf())
+                .with_extension(security.clone());
             let result = if let Some(tool) = tool_map.get(&call.name) {
                 info!(tool = %call.name, id = %call.id, "executing tool");
                 match tool.execute(&ctx, &call.arguments).await {
@@ -431,7 +519,11 @@ async fn stream_and_process_turn(
                         let max_len = 500;
                         let truncated = if err_str.len() > max_len {
                             let end = err_str.floor_char_boundary(max_len);
-                            format!("{}... [truncated {} bytes]", &err_str[..end], err_str.len() - end)
+                            format!(
+                                "{}... [truncated {} bytes]",
+                                &err_str[..end],
+                                err_str.len() - end
+                            )
                         } else {
                             err_str
                         };
@@ -486,10 +578,14 @@ async fn stream_and_process_turn(
 
 /// Rough token count estimate from message content length.
 pub fn estimate_tokens(messages: &[Message]) -> u32 {
-    let char_count: usize = messages.iter().map(|m| m.content.len()).sum();
+    let char_count: usize = messages
+        .iter()
+        .map(|m| m.content.len() + m.reasoning_content.as_ref().map(|r| r.len()).unwrap_or(0))
+        .sum();
     (char_count as f32 / CHARS_PER_TOKEN).ceil() as u32
 }
 
+#[allow(dead_code)]
 fn format_role(role: Role) -> &'static str {
     match role {
         Role::System => "System",
@@ -687,8 +783,7 @@ mod tests {
     #[tokio::test]
     async fn agent_system_prompt_injected() {
         let provider = Arc::new(MockProvider::text("got prompt"));
-        let agent = Agent::new(provider, 3)
-            .with_system_prompt("you are a test bot");
+        let agent = Agent::new(provider, 3).with_system_prompt("you are a test bot");
 
         let input = RunInput {
             prompt: "who are you".into(),
@@ -697,14 +792,16 @@ mod tests {
         };
 
         let result = agent.run_stream(input).await;
-        assert!(result.is_ok(), "agent with system prompt should run without error");
+        assert!(
+            result.is_ok(),
+            "agent with system prompt should run without error"
+        );
     }
 
     #[tokio::test]
     async fn agent_compaction_threshold_triggers() {
         let provider = Arc::new(MockProvider::text("compacted"));
-        let agent = Agent::new(provider, 3)
-            .with_compaction_threshold(Some(1));
+        let agent = Agent::new(provider, 3).with_compaction_threshold(Some(1));
 
         let input = RunInput {
             prompt: "a really long message that should trigger compaction".into(),
@@ -764,9 +861,127 @@ mod tests {
         }
 
         // Should see ToolResult and eventually Done
-        let has_tool_result = events.iter().any(|e| matches!(e, RunEvent::ToolResult { .. }));
+        let has_tool_result = events
+            .iter()
+            .any(|e| matches!(e, RunEvent::ToolResult { .. }));
         let has_done = events.iter().any(|e| matches!(e, RunEvent::Done(_)));
-        assert!(has_tool_result, "agent should execute tools and emit ToolResult");
+        assert!(
+            has_tool_result,
+            "agent should execute tools and emit ToolResult"
+        );
         assert!(has_done, "agent should eventually complete with Done");
+    }
+
+    #[tokio::test]
+    async fn agent_conversation_history_persists_across_runs() {
+        // A shared persistent store simulates one desktop/CLI session.
+        let history = Arc::new(tokio::sync::Mutex::new(Vec::<Message>::new()));
+
+        // --- Turn 1 ---
+        let agent1 = Agent::new(Arc::new(MockProvider::text("first answer")), 3)
+            .with_system_prompt("sys")
+            .with_conversation_history(history.clone());
+        let mut s1 = agent1
+            .run_stream(RunInput {
+                prompt: "hello".into(),
+                images: vec![],
+                model_override: None,
+            })
+            .await
+            .unwrap();
+        // Draining to None guarantees the spawned task finished its writeback
+        // (tx is dropped only after the store is persisted).
+        while s1.next().await.is_some() {}
+
+        {
+            let store = history.lock().await;
+            assert!(
+                store.iter().any(|m| m.role == Role::System),
+                "system prompt should be persisted on the first turn"
+            );
+            assert!(
+                store
+                    .iter()
+                    .any(|m| m.role == Role::User && m.content == "hello"),
+                "first user turn should be persisted"
+            );
+            assert!(
+                store.len() >= 3,
+                "expected at least system + user + assistant, got {}",
+                store.len()
+            );
+        }
+
+        // --- Turn 2: a brand-new agent sharing the same history store ---
+        let agent2 = Agent::new(Arc::new(MockProvider::text("second answer")), 3)
+            .with_system_prompt("sys")
+            .with_conversation_history(history.clone());
+        let mut s2 = agent2
+            .run_stream(RunInput {
+                prompt: "again".into(),
+                images: vec![],
+                model_override: None,
+            })
+            .await
+            .unwrap();
+        while s2.next().await.is_some() {}
+
+        let store = history.lock().await;
+        // Both user turns present => memory carried across separate runs.
+        assert!(
+            store
+                .iter()
+                .any(|m| m.role == Role::User && m.content == "hello"),
+            "turn-1 user message must survive into turn 2"
+        );
+        assert!(
+            store
+                .iter()
+                .any(|m| m.role == Role::User && m.content == "again"),
+            "turn-2 user message must be present"
+        );
+        // System prompt must NOT be duplicated on the seeded second run.
+        let system_count = store.iter().filter(|m| m.role == Role::System).count();
+        assert_eq!(
+            system_count, 1,
+            "system prompt must not be re-injected on a seeded run"
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_persists_reasoning_content_across_turns() {
+        // Proves the DeepSeek-V4 adaptation: an assistant turn's
+        // reasoning_content is written into the shared history store, so a
+        // subsequent run can replay it (must_replay contract spanning turns).
+        let history = Arc::new(tokio::sync::Mutex::new(Vec::<Message>::new()));
+
+        let turn1 = vec![
+            Chunk::ReasoningDelta {
+                text: "let me think about q1".into(),
+                signature: Some("sig-1".into()),
+            },
+            Chunk::TextDelta("the answer".into()),
+            Chunk::Usage(Usage::default()),
+            Chunk::Done,
+        ];
+        let agent = Agent::new(Arc::new(MockProvider::new(turn1)), 3)
+            .with_conversation_history(history.clone());
+        let mut s = agent
+            .run_stream(RunInput {
+                prompt: "q1".into(),
+                images: vec![],
+                model_override: None,
+            })
+            .await
+            .unwrap();
+        while s.next().await.is_some() {}
+
+        let store = history.lock().await;
+        assert!(
+            store.iter().any(|m| m.role == Role::Assistant
+                && m.reasoning_content.as_deref() == Some("let me think about q1")),
+            "assistant reasoning_content must persist into the shared history \
+             so DeepSeek-V4 reasoning replay works across turns"
+        );
     }
 }

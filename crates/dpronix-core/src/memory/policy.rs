@@ -19,9 +19,13 @@ impl Default for MemoryPromotionPolicy {
 }
 
 impl MemoryPromotionPolicy {
-    pub fn evaluate(&self, current_stage: &MemoryLifecycleStage, evidence: &MemoryEvidence) -> MemoryLifecycleStage {
+    pub fn evaluate(
+        &self,
+        current_stage: &MemoryLifecycleStage,
+        evidence: &MemoryEvidence,
+    ) -> MemoryLifecycleStage {
         let age_days = (Utc::now() - evidence.first_seen).num_days();
-        
+
         match current_stage {
             MemoryLifecycleStage::Candidate => {
                 if evidence.frequency >= 2 && evidence.confidence >= 0.6 {
@@ -31,9 +35,9 @@ impl MemoryPromotionPolicy {
                 }
             }
             MemoryLifecycleStage::Verified => {
-                if evidence.frequency >= self.min_frequency 
-                    && evidence.confidence >= self.min_confidence 
-                    && age_days >= self.min_age_days 
+                if evidence.frequency >= self.min_frequency
+                    && evidence.confidence >= self.min_confidence
+                    && age_days >= self.min_age_days
                 {
                     MemoryLifecycleStage::Permanent
                 } else {

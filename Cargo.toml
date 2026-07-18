@@ -20,11 +20,38 @@ members = [
     "crates/dpronix-telemetry",
     "crates/dpronix-desktop",
     "crates/dpronix-orch",
+    "crates/dpronix-security",
 ]
 resolver = "2"
+default-members = [
+    "crates/dpronix-cli",
+    "crates/dpronix-config",
+    "crates/dpronix-provider",
+    "crates/dpronix-agent",
+    "crates/dpronix-tools",
+    "crates/dpronix-core",
+    "crates/dpronix-mcp",
+    "crates/dpronix-event",
+    "crates/dpronix-permission",
+    "crates/dpronix-context",
+    "crates/dpronix-runtime",
+    "crates/dpronix-sandbox",
+    "crates/dpronix-checkpoint",
+    "crates/dpronix-store",
+    "crates/dpronix-tui",
+    "crates/dpronix-serve",
+    "crates/dpronix-skills",
+    "crates/dpronix-telemetry",
+    "crates/dpronix-orch",
+    "crates/dpronix-security",
+]
+
+[workspace.lints.rust]
+rustdoc_broken_intra_doc_links = "deny"
+rustdoc_invalid_codeblock_attributes = "deny"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/W117C/DPronix"
@@ -61,7 +88,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
 futures = "0.3"
 criterion = { version = "0.5", default-features = false }
-serde_yaml = "0.9"
+serde_yml = "0.0"
 walkdir = "2.5"
 glob = "0.3"
 regex = "1.11"

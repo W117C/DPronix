@@ -47,6 +47,7 @@ crates/
 ├── dpronix-event/      # Event bus
 ├── dpronix-runtime/    # Composition root
 ├── dpronix-sandbox/    # Process sandbox
+├── dpronix-security/   # Security policy (capabilities/paths/commands/domains/limits)
 ├── dpronix-checkpoint/ # File checkpoint/rollback
 ├── dpronix-store/      # Session persistence
 ├── dpronix-tui/        # Terminal UI

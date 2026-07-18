@@ -5,7 +5,7 @@
 //! Streaming events are delivered through Tauri Channels (`tauri::ipc::Channel`),
 //! the desktop equivalent of the HTTP SSE stream in `dpronix-serve`.
 
-use dpronix_core::runner::{RunEvent, RunInput, Runner};
+use dpronix_core::runner::{RunInput, Runner, WireEvent};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{ipc::Channel, State};
@@ -15,50 +15,6 @@ use tracing::info;
 use crate::AppState;
 
 // ---------------------------------------------------------------------------
-// Wire types — the JSON contract between frontend and backend.
-// Mirrors the SSE wire format from dpronix-serve but uses
-// Tauri Channel events instead of HTTP data: frames.
-// ---------------------------------------------------------------------------
-
-/// A single event pushed to the frontend Channel.
-/// The `kind` field discriminates the event type (analogous to SSE event names).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum WireEvent {
-    TextDelta { text: String },
-    ReasoningDelta { text: String, signature: Option<String> },
-    ToolCallStart { id: String, name: String },
-    ToolCallDelta { id: String, args_delta: String },
-    ToolCallEnd { id: String, name: String, arguments: String },
-    ToolResult { call_id: String, result: String },
-    Usage {
-        prompt_tokens: u32,
-        completion_tokens: u32,
-        total_tokens: u32,
-        cache_hit_tokens: u32,
-        cache_miss_tokens: u32,
-        session_cache_hit_tokens: u32,
-        session_cache_miss_tokens: u32,
-    },
-    TurnComplete,
-    Done {
-        text: String,
-        usage: Option<UsageInfo>,
-    },
-    Error { message: String },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UsageInfo {
-    pub prompt_tokens: u32,
-    pub completion_tokens: u32,
-    pub total_tokens: u32,
-    pub cache_hit_tokens: u32,
-    pub cache_miss_tokens: u32,
-    pub session_cache_hit_tokens: u32,
-    pub session_cache_miss_tokens: u32,
-}
-
 /// Frontend request to submit a prompt to the agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitRequest {
@@ -105,23 +61,50 @@ pub async fn submit_prompt(
     // Load config
     let config = dpronix_config::Config::load().map_err(|e| format!("config error: {e}"))?;
 
-    // Resolve provider
-    let provider_cfg = config.providers.first().ok_or("no providers configured")?;
-    let provider = dpronix_provider::factory::create_provider(provider_cfg)
+    // Build runtime — single shared composition root
+    let workspace_root = std::env::current_dir().unwrap_or_default();
+    let security = dpronix_runtime::build_security_context(&config, &workspace_root)
+        .map_err(|e| format!("security context error: {e}"))?;
+
+    // Resolve the provider config. If the frontend specified a model name,
+    // look it up by name; otherwise use the first configured provider.
+    let provider_cfg = if let Some(ref model_name) = request.model {
+        config
+            .resolve_provider_for_model(model_name)
+            .ok_or_else(|| format!("provider '{model_name}' not found in config"))?
+    } else {
+        config.providers.first().ok_or("no providers configured")?
+    };
+
+    // Map the frontend's reasoning_effort string to an enum, then let
+    // thinking_enabled=false override it to Disabled.
+    let effort = {
+        let from_string = request
+            .reasoning_effort
+            .as_deref()
+            .and_then(dpronix_provider::factory::ReasoningEffort::from_config_str);
+        // If the user explicitly disabled thinking, force Disabled
+        // regardless of what the reasoning_effort string says.
+        if request.thinking_enabled == Some(false) {
+            Some(dpronix_provider::factory::ReasoningEffort::Disabled)
+        } else {
+            from_string
+        }
+    };
+
+    let provider = dpronix_provider::factory::create_provider_for_task(provider_cfg, effort)
         .map_err(|e| format!("provider error: {e}"))?;
 
-    // Build agent with all tools
-    let mut agent = dpronix_agent::Agent::new(provider.into(), config.agent.max_steps);
-    // Note: provider/agent creation could be cached in AppState.runner for reuse
+    // Build agent wired through the composition root
+    let mut agent = dpronix_agent::Agent::new(provider.into(), config.agent.max_steps)
+        .with_workspace_root(workspace_root)
+        .with_security(security)
+        // Share the session's persistent conversation store so the agent
+        // carries memory across prompts (multi-turn). This is also what lets
+        // DeepSeek-V4's reasoning_content replay contract span user turns.
+        .with_conversation_history(state.history.clone());
     if let Some(ref sp) = config.agent.system_prompt {
         agent = agent.with_system_prompt(sp.clone());
-    }
-    // Apply reasoning effort and thinking mode from request
-    if let Some(ref effort) = request.reasoning_effort {
-        agent = agent.with_reasoning_effort(effort.clone());
-    }
-    if let Some(thinking) = request.thinking_enabled {
-        agent = agent.with_thinking_enabled(thinking);
     }
     for tool in dpronix_tools::all_builtin_tools() {
         agent.register_tool(tool);
@@ -148,76 +131,37 @@ pub async fn submit_prompt(
         match agent.run_stream(input).await {
             Ok(mut stream) => {
                 let mut final_text = String::new();
-                let mut final_usage: Option<UsageInfo> = None;
+                let mut final_usage: Option<dpronix_core::chunk::Usage> = None;
 
                 while let Some(event) = stream.next().await {
                     if cancel_clone.is_cancelled() {
                         let _ = on_event.send(WireEvent::Done {
                             text: final_text,
-                            usage: final_usage,
+                            usage: final_usage.map(Into::into),
                         });
                         return;
                     }
 
                     match event {
-                        Ok(RunEvent::TextDelta(text)) => {
-                            final_text.push_str(&text);
-                            let _ = on_event.send(WireEvent::TextDelta { text });
-                        }
-                        Ok(RunEvent::ReasoningDelta { text, signature }) => {
-                            let _ = on_event.send(WireEvent::ReasoningDelta { text, signature });
-                        }
-                        Ok(RunEvent::ToolCallStart { id, name }) => {
-                            let _ = on_event.send(WireEvent::ToolCallStart { id, name });
-                        }
-                        Ok(RunEvent::ToolCallDelta { id, args_delta }) => {
-                            let _ = on_event.send(WireEvent::ToolCallDelta { id, args_delta });
-                        }
-                        Ok(RunEvent::ToolCallEnd { id, name, arguments }) => {
-                            let _ = on_event.send(WireEvent::ToolCallEnd { id, name, arguments });
-                        }
-                        Ok(RunEvent::ToolResult { call_id, result }) => {
-                            let _ = on_event.send(WireEvent::ToolResult { call_id, result });
-                        }
-                        Ok(RunEvent::Usage(u)) => {
-                            let usage_info = UsageInfo {
-                                prompt_tokens: u.prompt_tokens,
-                                completion_tokens: u.completion_tokens,
-                                total_tokens: u.total_tokens,
-                                cache_hit_tokens: u.cache_hit_tokens,
-                                cache_miss_tokens: u.cache_miss_tokens,
-                                session_cache_hit_tokens: u.cache_hit_tokens,
-                                session_cache_miss_tokens: u.cache_miss_tokens,
-                            };
-                            final_usage = Some(usage_info.clone());
-                            let _ = on_event.send(WireEvent::Usage {
-                                prompt_tokens: u.prompt_tokens,
-                                completion_tokens: u.completion_tokens,
-                                total_tokens: u.total_tokens,
-                                cache_hit_tokens: u.cache_hit_tokens,
-                                cache_miss_tokens: u.cache_miss_tokens,
-                                session_cache_hit_tokens: u.cache_hit_tokens,
-                                session_cache_miss_tokens: u.cache_miss_tokens,
-                            });
-                        }
-                        Ok(RunEvent::TurnComplete) => {
-                            let _ = on_event.send(WireEvent::TurnComplete);
-                        }
-                        Ok(RunEvent::Done(output)) => {
-                            let usage_info = UsageInfo {
-                                prompt_tokens: output.usage.as_ref().map_or(0, |u| u.prompt_tokens),
-                                completion_tokens: output.usage.as_ref().map_or(0, |u| u.completion_tokens),
-                                total_tokens: output.usage.as_ref().map_or(0, |u| u.total_tokens),
-                                cache_hit_tokens: output.usage.as_ref().map_or(0, |u| u.cache_hit_tokens),
-                                cache_miss_tokens: output.usage.as_ref().map_or(0, |u| u.cache_miss_tokens),
-                                session_cache_hit_tokens: output.usage.as_ref().map_or(0, |u| u.cache_hit_tokens),
-                                session_cache_miss_tokens: output.usage.as_ref().map_or(0, |u| u.cache_miss_tokens),
-                            };
-                            let _ = on_event.send(WireEvent::Done {
-                                text: output.text,
-                                usage: Some(usage_info),
-                            });
-                            return;
+                        Ok(ev) => {
+                            // Accumulate text deltas for the final Done event
+                            if let dpronix_core::runner::RunEvent::TextDelta(ref text) = ev {
+                                final_text.push_str(text);
+                            }
+                            if let dpronix_core::runner::RunEvent::Usage(ref usage) = ev {
+                                final_usage = Some(usage.clone());
+                            }
+                            // Also capture text from the terminal Done event
+                            if let dpronix_core::runner::RunEvent::Done(ref output) = ev {
+                                if !output.text.is_empty() {
+                                    final_text = output.text.clone();
+                                }
+                                if output.usage.is_some() {
+                                    final_usage = output.usage.clone();
+                                }
+                            }
+                            let wire: WireEvent = ev.into();
+                            let _ = on_event.send(wire);
                         }
                         Err(e) => {
                             let _ = on_event.send(WireEvent::Error {
@@ -227,6 +171,12 @@ pub async fn submit_prompt(
                         }
                     }
                 }
+
+                // Stream ended normally — send final Done event
+                let _ = on_event.send(WireEvent::Done {
+                    text: final_text,
+                    usage: final_usage.map(Into::into),
+                });
             }
             Err(e) => {
                 let _ = on_event.send(WireEvent::Error {
@@ -247,6 +197,16 @@ pub async fn cancel_run(state: State<'_, AppState>) -> Result<(), String> {
         token.cancel();
         info!("agent run cancelled");
     }
+    Ok(())
+}
+
+/// Start a fresh conversation: clear the persistent history store so the next
+/// prompt begins with no prior context (system prompt re-injected).
+#[tauri::command]
+pub async fn new_session(state: State<'_, AppState>) -> Result<(), String> {
+    let mut history = state.history.lock().await;
+    history.clear();
+    info!("new session started (conversation history cleared)");
     Ok(())
 }
 
@@ -308,8 +268,133 @@ pub async fn get_capabilities() -> Result<serde_json::Value, String> {
     }))
 }
 
+/// Respond to an approval request (approve or reject a pending action).
+#[tauri::command]
+pub async fn respond_approval(
+    state: State<'_, AppState>,
+    request_id: String,
+    approved: bool,
+) -> Result<(), String> {
+    info!("respond_approval: id={request_id} approved={approved}");
+    // Forward the response to the agent's approval channel if one exists.
+    let mut approval_tx = state.approval_tx.lock().await;
+    if let Some(tx) = approval_tx.take() {
+        let _ = tx.send((request_id, approved));
+    }
+    Ok(())
+}
+
 /// Health check command.
 #[tauri::command]
 pub async fn health_check() -> Result<String, String> {
     Ok("ok".to_string())
+}
+
+// ── Session persistence ─────────────────────────────────────────
+
+/// A summary of one conversation session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub id: String,
+    pub title: String,
+    pub message_count: usize,
+    pub created_at: String,
+}
+
+/// Helper to load/ save session metadata JSON.
+fn sessions_path() -> std::path::PathBuf {
+    let mut p = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    p.push(".dpronix");
+    p.push("sessions.json");
+    p
+}
+
+fn load_sessions() -> Vec<SessionInfo> {
+    let path = sessions_path();
+    if !path.exists() {
+        return vec![SessionInfo {
+            id: "default".into(),
+            title: "Current Session".into(),
+            message_count: 0,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default(),
+        }];
+    }
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_sessions(sessions: &[SessionInfo]) {
+    let path = sessions_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(sessions).unwrap_or_default());
+}
+
+fn generate_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    format!("s{:x}{:04x}", d.as_secs(), d.subsec_nanos() % 0x10000)
+}
+
+/// List all sessions.
+#[tauri::command]
+pub async fn list_sessions() -> Result<Vec<SessionInfo>, String> {
+    Ok(load_sessions())
+}
+
+/// Create a new session and return its id.
+#[tauri::command]
+pub async fn create_session(title: Option<String>) -> Result<SessionInfo, String> {
+    let mut sessions = load_sessions();
+    let id = generate_id();
+    let session = SessionInfo {
+        id: id.clone(),
+        title: title.unwrap_or_else(|| "Untitled".into()),
+        message_count: 0,
+        created_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs().to_string())
+            .unwrap_or_default(),
+    };
+    sessions.push(session.clone());
+    save_sessions(&sessions);
+    info!("created session {id}");
+    Ok(session)
+}
+
+/// Delete a session by id.
+#[tauri::command]
+pub async fn delete_session(id: String) -> Result<(), String> {
+    let mut sessions = load_sessions();
+    sessions.retain(|s| s.id != id);
+    save_sessions(&sessions);
+    info!("deleted session {id}");
+    Ok(())
+}
+
+/// List top-level workspace files (for the Files tab in sidebar).
+#[tauri::command]
+pub async fn get_workspace_files() -> Result<Vec<String>, String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("cwd error: {e}"))?;
+    let mut entries = Vec::new();
+    let mut dir = tokio::fs::read_dir(&cwd)
+        .await
+        .map_err(|e| format!("read_dir error: {e}"))?;
+    while let Some(entry) = dir.next_entry().await.map_err(|e| format!("entry error: {e}"))? {
+        let path = entry.path();
+        let display = if path.is_dir() {
+            format!("{}/", path.file_name().map(|s| s.to_string_lossy()).unwrap_or_default())
+        } else {
+            path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
+        };
+        entries.push(display);
+    }
+    entries.sort();
+    Ok(entries)
 }

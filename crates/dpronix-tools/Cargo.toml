@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "13+ built-in agent tools: file I/O, glob, grep, shell, web fetch, task management, and MCP bridging."
+readme = "README.md"
+documentation = "https://docs.rs/dpronix-tools/0.3.0"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -17,11 +20,13 @@ chrono = { workspace = true }
 glob = { workspace = true }
 regex = { workspace = true }
 url = { workspace = true }
-dpronix-core = { version = "0.1.0", path = "../dpronix-core" }
-dpronix-sandbox = { version = "0.1.0", path = "../dpronix-sandbox" }
-dpronix-checkpoint = { version = "0.1.0", path = "../dpronix-checkpoint" }
+dpronix-core = { version = "0.3.0", path = "../dpronix-core" }
+dpronix-sandbox = { version = "0.3.0", path = "../dpronix-sandbox" }
+dpronix-checkpoint = { version = "0.3.0", path = "../dpronix-checkpoint" }
+dpronix-security = { version = "0.3.0", path = "../dpronix-security" }
 sha2 = { workspace = true }
 hex = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }

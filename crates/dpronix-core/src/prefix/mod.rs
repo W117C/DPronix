@@ -1,7 +1,7 @@
-pub mod state;
-pub mod epoch;
-pub mod transaction;
 pub mod controller;
+pub mod epoch;
+pub mod health;
 pub mod mutation;
 pub mod recovery;
-pub mod health;
+pub mod state;
+pub mod transaction;

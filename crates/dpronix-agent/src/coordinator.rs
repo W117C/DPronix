@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::SubAgentRunner;
@@ -9,6 +10,7 @@ use dpronix_core::graph::{Action, ExecutionGraph, ExecutionNode};
 use dpronix_core::tool::ToolContext;
 use dpronix_core::{Message, Role, RunEvent, RunEventStream, RunInput, RunOutput, Runner, Tool};
 use dpronix_provider::Provider;
+use dpronix_security::context::SecurityContext;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -114,7 +116,9 @@ impl GoalContract {
         s.push_str("- `think` for reasoning (no side-effects)\n");
         s.push_str("- `call_read_tool` for read-only tool calls\n");
         s.push_str("- `delegate` for sub-agent dispatch\n");
-        s.push_str("NEVER use `call_tool` in the plan — only the executor may call mutating tools.\n");
+        s.push_str(
+            "NEVER use `call_tool` in the plan — only the executor may call mutating tools.\n",
+        );
         s
     }
 }
@@ -224,9 +228,15 @@ Rules:
 fn build_planning_prompt(goal: &str, read_only_tools: &[&dyn Tool]) -> Vec<Message> {
     let mut extra = String::new();
     if !read_only_tools.is_empty() {
-        extra.push_str("\n\nYou have access to these read-only tools for use in call_read_tool nodes:\n");
+        extra.push_str(
+            "\n\nYou have access to these read-only tools for use in call_read_tool nodes:\n",
+        );
         for t in read_only_tools {
-            extra.push_str(&format!("- {}: {}\n", t.schema().name, t.schema().description));
+            extra.push_str(&format!(
+                "- {}: {}\n",
+                t.schema().name,
+                t.schema().description
+            ));
         }
     }
 
@@ -253,12 +263,19 @@ fn build_planning_prompt(goal: &str, read_only_tools: &[&dyn Tool]) -> Vec<Messa
     ]
 }
 
-fn build_goal_planning_prompt(contract: &GoalContract, read_only_tools: &[&dyn Tool]) -> Vec<Message> {
+fn build_goal_planning_prompt(
+    contract: &GoalContract,
+    read_only_tools: &[&dyn Tool],
+) -> Vec<Message> {
     let mut extra = String::new();
     if !read_only_tools.is_empty() {
         extra.push_str("\n\nRead-only tools available for call_read_tool nodes:\n");
         for t in read_only_tools {
-            extra.push_str(&format!("- {}: {}\n", t.schema().name, t.schema().description));
+            extra.push_str(&format!(
+                "- {}: {}\n",
+                t.schema().name,
+                t.schema().description
+            ));
         }
     }
 
@@ -309,6 +326,10 @@ pub struct CoordinatorRunner {
     /// When true (default), planner system prompt is pinned byte-for-byte
     /// across turns so prefix cache stays warm.
     cache_stable_prefix: bool,
+    /// Workspace root used to confine filesystem tool calls in executor nodes.
+    workspace_root: PathBuf,
+    /// Security context injected into every executor tool execution.
+    security: SecurityContext,
 }
 
 impl CoordinatorRunner {
@@ -323,6 +344,8 @@ impl CoordinatorRunner {
             goal_mode: false,
             reasoning_language: ReasoningLanguage::Auto,
             cache_stable_prefix: true,
+            workspace_root: std::env::current_dir().unwrap_or_default(),
+            security: SecurityContext::with_safe_defaults(),
         }
     }
 
@@ -375,6 +398,18 @@ impl CoordinatorRunner {
         self.cache_stable_prefix = enabled;
         self
     }
+
+    /// Override the workspace root used to confine filesystem tool calls.
+    pub fn with_workspace_root(mut self, workspace_root: PathBuf) -> Self {
+        self.workspace_root = workspace_root;
+        self
+    }
+
+    /// Override the security context injected into every executor tool execution.
+    pub fn with_security(mut self, security: SecurityContext) -> Self {
+        self.security = security;
+        self
+    }
 }
 
 #[async_trait::async_trait]
@@ -389,11 +424,12 @@ impl Runner for CoordinatorRunner {
             .iter()
             .map(|(k, v)| (k.clone(), Arc::clone(v)))
             .collect();
-        let read_only_refs: Vec<Arc<dyn Tool>> =
-            self.read_only_tools.values().cloned().collect();
+        let read_only_refs: Vec<Arc<dyn Tool>> = self.read_only_tools.values().cloned().collect();
         let max_nodes = self.max_graph_nodes;
         let sub_agent_runner = self.sub_agent_runner.clone();
         let goal_mode = self.goal_mode;
+        let workspace_root = self.workspace_root.clone();
+        let security = self.security.clone();
 
         tokio::spawn(async move {
             if let Err(e) = run_coordinator(
@@ -404,6 +440,8 @@ impl Runner for CoordinatorRunner {
                 max_nodes,
                 sub_agent_runner,
                 goal_mode,
+                workspace_root,
+                security,
                 input,
                 &tx,
             )
@@ -430,6 +468,8 @@ async fn run_coordinator(
     max_nodes: usize,
     sub_agent_runner: Option<Arc<SubAgentRunner>>,
     goal_mode: bool,
+    workspace_root: PathBuf,
+    security: SecurityContext,
     input: RunInput,
     tx: &mpsc::Sender<anyhow::Result<RunEvent>>,
 ) -> anyhow::Result<()> {
@@ -439,7 +479,7 @@ async fn run_coordinator(
     // Build prompt depending on mode.
     let read_only_views: Vec<&dyn Tool> = read_only_tools.iter().map(|t| t.as_ref()).collect();
 
-    let plan_response = if goal_mode {
+    let plan_messages = if goal_mode {
         // In goal mode, the prompt field is JSON-encoded GoalContract.
         let contract: GoalContract = match serde_json::from_str::<GoalContract>(&input.prompt) {
             Ok(c) => c,
@@ -454,14 +494,19 @@ async fn run_coordinator(
                 }
             }
         };
-        planner
-            .generate(&build_goal_planning_prompt(&contract, &read_only_views), &[])
-            .await?
+        build_goal_planning_prompt(&contract, &read_only_views)
     } else {
-        planner
-            .generate(&build_planning_prompt(&input.prompt, &read_only_views), &[])
-            .await?
+        build_planning_prompt(&input.prompt, &read_only_views)
     };
+
+    let validated =
+        dpronix_provider::ValidatedRequest::new(&plan_messages, &[]).map_err(|violations| {
+            anyhow::anyhow!(
+                "planning prompt replay invariant violated: {} violation(s) detected",
+                violations.len()
+            )
+        })?;
+    let plan_response = planner.generate(validated).await?;
 
     tx.send(Ok(RunEvent::TextDelta(format!(
         "[PLAN]\n{}\n",
@@ -484,10 +529,16 @@ async fn run_coordinator(
     // ---- Phase 2: Execution ----
     info!("coordinator: execution phase");
 
+    // Capture planner reasoning for executor context
+    let planner_reasoning = plan_response.reasoning_content.clone();
+
     let callbacks = Arc::new(CoordinatorCallbacks {
         provider: executor,
         tools,
         sub_agent_runner,
+        workspace_root,
+        security,
+        planner_reasoning,
     });
 
     let think: Arc<dyn ThinkCallback> = callbacks.clone();
@@ -495,9 +546,7 @@ async fn run_coordinator(
     let reflect: Arc<dyn ReflectCallback> = callbacks.clone();
     let delegate: Arc<dyn DelegateCallback> = callbacks;
 
-    let graph_executor = Arc::new(
-        GraphExecutor::new(think, tool, reflect).with_delegate(delegate),
-    );
+    let graph_executor = Arc::new(GraphExecutor::new(think, tool, reflect).with_delegate(delegate));
 
     let result = graph_executor.execute(&graph).await?;
 
@@ -547,10 +596,7 @@ async fn run_coordinator(
 /// tool is registered as read-only. This is the runtime enforcement of the
 /// planner / executor split.
 fn validate_plan_tool_boundary(graph: &ExecutionGraph, read_only: &[Arc<dyn Tool>]) {
-    let allowed: Vec<String> = read_only
-        .iter()
-        .map(|t| t.schema().name.clone())
-        .collect();
+    let allowed: Vec<String> = read_only.iter().map(|t| t.schema().name.clone()).collect();
     for (id, node) in &graph.nodes {
         let maybe_tool = match &node.action {
             Action::CallTool { tool, .. } => Some(tool.as_str()),
@@ -572,12 +618,7 @@ fn validate_plan_tool_boundary(graph: &ExecutionGraph, read_only: &[Arc<dyn Tool
 // Plan parsing — JSON → ExecutionGraph (with fallback)
 // ---------------------------------------------------------------------------
 
-fn parse_plan(
-    plan_text: &str,
-    goal: &str,
-    max_nodes: usize,
-    goal_mode: bool,
-) -> ExecutionGraph {
+fn parse_plan(plan_text: &str, goal: &str, max_nodes: usize, goal_mode: bool) -> ExecutionGraph {
     let json_str = extract_json_block(plan_text);
 
     match serde_json::from_str::<PlanOutput>(&json_str) {
@@ -600,10 +641,7 @@ fn parse_plan(
                             .clone()
                             .or_else(|| node.tool.clone())
                             .unwrap_or_default();
-                        let goal = node
-                            .goal
-                            .clone()
-                            .unwrap_or_else(|| node.prompt.clone());
+                        let goal = node.goal.clone().unwrap_or_else(|| node.prompt.clone());
                         Action::Delegate { sub_agent, goal }
                     }
                     _ => Action::Think {
@@ -675,20 +713,46 @@ struct CoordinatorCallbacks {
     provider: Arc<dyn Provider>,
     tools: HashMap<String, Arc<dyn Tool>>,
     sub_agent_runner: Option<Arc<SubAgentRunner>>,
+    workspace_root: PathBuf,
+    security: SecurityContext,
+    /// Planner's reasoning content to pass as context to executor.
+    planner_reasoning: Option<String>,
 }
 
 #[async_trait::async_trait]
 impl ThinkCallback for CoordinatorCallbacks {
     async fn think(&self, prompt: &str) -> anyhow::Result<String> {
-        let messages = vec![Message {
+        let mut messages = Vec::new();
+        // Pass planner's reasoning as context so executor benefits from DeepSeek thinking
+        if let Some(ref reasoning) = self.planner_reasoning {
+            messages.push(Message {
+                role: Role::Assistant,
+                content: String::new(),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+                reasoning_content: Some(reasoning.clone()),
+            });
+        }
+        messages.push(Message {
             role: Role::User,
             content: prompt.to_string(),
             name: None,
             tool_calls: None,
             tool_call_id: None,
             reasoning_content: None,
-        }];
-        let result = self.provider.generate(&messages, &[]).await?;
+        });
+        let validated =
+            dpronix_provider::ValidatedRequest::new(&messages, &[]).map_err(|violations| {
+                for v in &violations {
+                    tracing::error!(?v, "replay invariant violation in coordinator generate");
+                }
+                anyhow::anyhow!(
+                    "history replay invariant violated: {} violation(s)",
+                    violations.len()
+                )
+            })?;
+        let result = self.provider.generate(validated).await?;
         Ok(result.content)
     }
 }
@@ -701,7 +765,9 @@ impl ToolCallback for CoordinatorCallbacks {
             .get(tool_name)
             .ok_or_else(|| anyhow::anyhow!("unknown tool: {tool_name}"))?;
 
-        let ctx = ToolContext::new(uuid::Uuid::new_v4().to_string());
+        let ctx = ToolContext::new(uuid::Uuid::new_v4().to_string())
+            .with_workspace(self.workspace_root.clone())
+            .with_extension(self.security.clone());
         let args_str = serde_json::to_string(args)?;
         tool.execute(&ctx, &args_str).await
     }
@@ -728,7 +794,18 @@ impl ReflectCallback for CoordinatorCallbacks {
             reasoning_content: None,
         }];
 
-        let result = self.provider.generate(&messages, &[]).await?;
+        let validated =
+            dpronix_provider::ValidatedRequest::new(&messages, &[]).map_err(|violations| {
+                for v in &violations {
+                    tracing::error!(?v, "replay invariant violation in coordinator reflect");
+                }
+                anyhow::anyhow!(
+                    "history replay invariant violated: {} violation(s)",
+                    violations.len()
+                )
+            })?;
+
+        let result = self.provider.generate(validated).await?;
 
         #[derive(Deserialize)]
         struct ReflectResponse {

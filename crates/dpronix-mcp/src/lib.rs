@@ -1,3 +1,9 @@
+//! # MCP — Model Context Protocol client
+//!
+//! Connects to external MCP-compatible tool servers (stdio or HTTP)
+//! and exposes their tools through the standard DPronix Tool trait.
+//! Supports listing, calling, and streaming from MCP servers.
+
 pub mod adapter;
 pub mod client;
 pub mod connection;

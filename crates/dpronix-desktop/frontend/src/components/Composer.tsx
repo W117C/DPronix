@@ -1,15 +1,19 @@
 /**
- * Composer — input area with send/cancel button.
- * Inspired by DeepSeek-DPronix desktop/frontend/src/components/Composer.tsx
+ * Composer — input area with auto-resize and keyboard shortcuts.
+ *
+ * Keyboard:
+ *   Enter         → send (or cancel if running)
+ *   Shift+Enter   → newline
+ *   Cmd/Ctrl+↑ ↓  → prompt history (handled by parent via onKeyDown)
  */
-
-import { useCallback, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 
 interface ComposerProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
   running: boolean;
   disabled?: boolean;
   placeholder?: string;
@@ -20,45 +24,47 @@ export default function Composer({
   onChange,
   onSubmit,
   onCancel,
+  onKeyDown,
   running,
   disabled,
   placeholder,
 }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea
+  // auto-resize
   useEffect(() => {
     const el = textareaRef.current;
     if (el) {
       el.style.height = "auto";
-      el.style.height = Math.min(el.scrollHeight, 120) + "px";
+      el.style.height = Math.min(el.scrollHeight, 180) + "px";
     }
   }, [value]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
+  // Cmd+L global focus
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "l" || e.key === "L")) {
         e.preventDefault();
-        if (running) {
-          onCancel();
-        } else if (value.trim()) {
-          onSubmit();
-        }
+        textareaRef.current?.focus();
       }
-    },
-    [running, value, onSubmit, onCancel],
-  );
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    onKeyDown?.(e);
+  };
 
   return (
-    <div className="composer">
-      <div className="composer-input-wrap">
+    <div className="dp-composer">
+      <div className="dp-composer-inner">
         <textarea
           ref={textareaRef}
-          className="composer-input"
           placeholder={
             running
               ? "Agent is running… (Enter to cancel)"
-              : placeholder ?? "Ask anything… (Enter to send, Shift+Enter for new line)"
+              : placeholder ?? "Ask anything…"
           }
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -67,13 +73,30 @@ export default function Composer({
           rows={1}
         />
         <button
-          className={`composer-btn ${running ? "btn-cancel" : "btn-send"}`}
+          type="button"
+          className={`send${running ? " cancel" : ""}`}
+          aria-label={running ? "Cancel" : "Send"}
           onClick={running ? onCancel : onSubmit}
           disabled={!running && (!value.trim() || disabled)}
-          title={running ? "Cancel" : "Send"}
         >
-          {running ? "■" : "→"}
+          {running ? (
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          )}
         </button>
+      </div>
+      <div className="dp-composer-hints">
+        <span>
+          <kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> newline
+        </span>
+        <span>
+          <kbd>⌘↑</kbd> history
+        </span>
       </div>
     </div>
   );

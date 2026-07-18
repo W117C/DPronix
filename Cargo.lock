@@ -125,7 +125,7 @@ dependencies = [
  "objc2-foundation",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
  "wl-clipboard-rs",
  "x11rb",
 ]
@@ -1200,12 +1200,14 @@ dependencies = [
 
 [[package]]
 name = "dpronix-agent"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "dpronix-context",
  "dpronix-core",
  "dpronix-provider",
+ "dpronix-security",
  "serde",
  "serde_json",
  "tokio",
@@ -1217,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-checkpoint"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1233,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-cli"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1241,9 +1243,15 @@ dependencies = [
  "dpronix-agent",
  "dpronix-config",
  "dpronix-core",
+ "dpronix-mcp",
+ "dpronix-orch",
  "dpronix-provider",
+ "dpronix-runtime",
+ "dpronix-security",
+ "dpronix-serve",
  "dpronix-skills",
  "dpronix-tools",
+ "serde_json",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -1252,7 +1260,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-config"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1264,21 +1272,25 @@ dependencies = [
 
 [[package]]
 name = "dpronix-context"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
  "dpronix-core",
+ "hex",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
+ "thiserror 1.0.69",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
 name = "dpronix-core"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1302,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-desktop"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-agent",
@@ -1330,7 +1342,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-event"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "dpronix-core",
  "serde",
@@ -1340,7 +1352,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-mcp"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1356,7 +1368,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-orch"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1367,6 +1379,8 @@ dependencies = [
  "dpronix-event",
  "dpronix-provider",
  "dpronix-tools",
+ "rand",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tokio",
@@ -1378,7 +1392,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-permission"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-config",
@@ -1393,11 +1407,12 @@ dependencies = [
 
 [[package]]
 name = "dpronix-provider"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "dpronix-config",
+ "dpronix-context",
  "dpronix-core",
  "futures",
  "reqwest 0.12.28",
@@ -1411,7 +1426,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-runtime"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-agent",
@@ -1421,6 +1436,7 @@ dependencies = [
  "dpronix-event",
  "dpronix-permission",
  "dpronix-provider",
+ "dpronix-security",
  "dpronix-tools",
  "tokio",
  "tracing",
@@ -1428,7 +1444,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-sandbox"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "dpronix-core",
@@ -1437,8 +1453,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dpronix-security"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "dpronix-core",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "dpronix-serve"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1458,14 +1484,14 @@ dependencies = [
 
 [[package]]
 name = "dpronix-skills"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "dpronix-core",
  "serde",
  "serde_json",
- "serde_yaml",
+ "serde_yml",
  "tempfile",
  "tokio",
  "tracing",
@@ -1474,7 +1500,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-store"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1487,7 +1513,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-telemetry"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "opentelemetry",
@@ -1502,7 +1528,7 @@ dependencies = [
 
 [[package]]
 name = "dpronix-tools"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1510,6 +1536,7 @@ dependencies = [
  "dpronix-checkpoint",
  "dpronix-core",
  "dpronix-sandbox",
+ "dpronix-security",
  "glob",
  "hex",
  "regex",
@@ -1521,11 +1548,12 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]
 name = "dpronix-tui"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3090,6 +3118,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "noyalib"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e493c05128df7a83b9676b709d590e0ebc285c7ed3152bc679668e8c1e506af5"
+dependencies = [
+ "indexmap 2.14.0",
+ "memchr",
+ "rustc-hash",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4180,7 +4221,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4537,16 +4578,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
+name = "serde_yml"
+version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
+checksum = "909764a65f86829ccdb5eea9ab355843aa02c019a7bfd47465092953565caa05"
 dependencies = [
- "indexmap 2.14.0",
- "itoa",
- "ryu",
+ "noyalib",
  "serde",
- "unsafe-libyaml",
 ]
 
 [[package]]
@@ -5935,12 +5973,6 @@ name = "unicode-width"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
-
-[[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"

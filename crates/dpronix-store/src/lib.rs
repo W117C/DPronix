@@ -1,3 +1,9 @@
+//! # Store — Session persistence
+//!
+//! JSONL-based session recording: persists every agent turn to disk
+//! for replay, debugging, and analytics.
+//! Supports rotation and compaction.
+
 use dpronix_core::{Message, Role, RunInput};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -74,9 +80,7 @@ impl SessionStore {
 
     /// The path to the JSONL file for a session.
     fn session_path(&self, session_id: &str) -> PathBuf {
-        self.root
-            .join(session_id)
-            .with_extension("jsonl")
+        self.root.join(session_id).with_extension("jsonl")
     }
 
     /// Load all turns from a session. Returns an empty Vec if the file
