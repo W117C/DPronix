@@ -47,11 +47,19 @@ async fn main() -> anyhow::Result<()> {
                     .executor_model
                     .clone()
                     .or_else(|| model_args.model.clone());
-                let executor_provider = resolve_provider(&config, &executor_model)?;
+                let executor_provider = resolve_provider_for_task(
+                    &config,
+                    &executor_model,
+                    Some(dpronix_provider::factory::ReasoningEffort::High),
+                )?;
                 let max_nodes = coordinator.max_graph_nodes;
 
+                let workspace_root = std::env::current_dir().unwrap_or_default();
+                let security = dpronix_runtime::build_security_context(&config, &workspace_root)?;
                 let mut runner = CoordinatorRunner::new(planner_provider, executor_provider)
-                    .with_max_graph_nodes(max_nodes);
+                    .with_max_graph_nodes(max_nodes)
+                    .with_workspace_root(workspace_root)
+                    .with_security(security);
 
                 // Wire all built-in tools for the executor.
                 for tool in dpronix_tools::all_builtin_tools() {
@@ -72,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
                     model_args.model.as_deref(),
                     &config,
                     model_args.max_steps,
-                );
+                )?;
 
                 let input = RunInput {
                     prompt: prompt_str,
@@ -112,25 +120,54 @@ async fn main() -> anyhow::Result<()> {
         // ── Chat (with /new loop) ────────────────────────────────────────
         Some(Commands::Chat { model }) => {
             info!("chat: model={model:?}");
+            // Compute the baseline reasoning effort from config so the
+            // REPL knows what to restore when toggling thinking back on.
+            let provider_cfg = resolve_provider_cfg(&config, model.as_deref());
+            let baseline_effort = dpronix_provider::factory::resolve_effort(provider_cfg, None);
+
             loop {
-                let provider = resolve_provider(&config, model)?;
-                let agent = build_agent(
-                    Arc::clone(&provider),
-                    model.as_deref(),
-                    &config,
-                    0, // no max_steps limit in chat mode
-                );
-                let restart = chat::run_chat_repl(&agent, model.clone()).await?;
+                // Persistent session memory — shared across model/effort
+                // rebuilds within the same `/new` session.
+                let history: Arc<tokio::sync::Mutex<Vec<dpronix_core::Message>>> =
+                    Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
+                let history_clone = Arc::clone(&history);
+                let cfg = &config;
+                let agent_factory =
+                    move |effort: Option<dpronix_provider::factory::ReasoningEffort>,
+                          model_name: Option<String>|
+                          -> anyhow::Result<Box<dyn Runner + Send>> {
+                        let provider = resolve_provider_for_task(cfg, &model_name, effort)?;
+                        let agent = build_agent(
+                            Arc::clone(&provider),
+                            model_name.as_deref(),
+                            cfg,
+                            0, // no max_steps limit in chat mode
+                        )?
+                        .with_conversation_history(Arc::clone(&history_clone));
+                        Ok(Box::new(agent))
+                    };
+
+                let restart =
+                    chat::run_chat_repl(agent_factory, baseline_effort, model.clone()).await?;
                 if !restart {
                     break;
                 }
+                // Drop & recreate history for the new session.
+                drop(history);
                 info!("restarting chat session...");
             }
         }
 
         Some(Commands::Serve { addr }) => {
             info!("serve command: addr={addr}");
-            println!("HTTP serve is coming in Phase 4.");
+
+            let provider = resolve_provider(&config, &None)?;
+            let agent = build_agent(Arc::clone(&provider), None, &config, 0)?;
+            let runner: Arc<dyn Runner> = Arc::new(agent);
+
+            let server = dpronix_serve::Server::new(runner);
+            server.serve(addr).await?;
         }
 
         Some(Commands::Setup { local }) => {
@@ -149,13 +186,32 @@ async fn main() -> anyhow::Result<()> {
 
         None => {
             info!("no command provided — starting interactive chat");
+            // Resolve baseline effort from the default provider config.
+            let provider_cfg = resolve_provider_cfg(&config, None);
+            let baseline_effort = dpronix_provider::factory::resolve_effort(provider_cfg, None);
+
             loop {
-                let provider = resolve_provider(&config, &None)?;
-                let agent = build_agent(Arc::clone(&provider), None, &config, 0);
-                let restart = chat::run_chat_repl(&agent, None).await?;
+                let history: Arc<tokio::sync::Mutex<Vec<dpronix_core::Message>>> =
+                    Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
+                let history_clone = Arc::clone(&history);
+                let cfg = &config;
+                let agent_factory =
+                    move |effort: Option<dpronix_provider::factory::ReasoningEffort>,
+                          model_name: Option<String>|
+                          -> anyhow::Result<Box<dyn Runner + Send>> {
+                        let provider = resolve_provider_for_task(cfg, &model_name, effort)?;
+                        let agent =
+                            build_agent(Arc::clone(&provider), model_name.as_deref(), cfg, 0)?
+                                .with_conversation_history(Arc::clone(&history_clone));
+                        Ok(Box::new(agent))
+                    };
+
+                let restart = chat::run_chat_repl(agent_factory, baseline_effort, None).await?;
                 if !restart {
                     break;
                 }
+                drop(history);
             }
         }
     }
@@ -167,10 +223,39 @@ async fn main() -> anyhow::Result<()> {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Resolve a ProviderConfig for a given model name (or the default).
+fn resolve_provider_cfg<'a>(
+    config: &'a dpronix_config::Config,
+    model: Option<&str>,
+) -> &'a dpronix_config::ProviderConfig {
+    if let Some(model_name) = model {
+        config
+            .resolve_provider_for_model(model_name)
+            .unwrap_or_else(|| &config.providers[0])
+    } else {
+        &config.providers[0]
+    }
+}
+
 /// Resolve the provider from config for a given model name.
 fn resolve_provider(
     config: &dpronix_config::Config,
     model: &Option<String>,
+) -> anyhow::Result<Arc<dyn dpronix_provider::Provider>> {
+    resolve_provider_for_task(config, model, None)
+}
+
+/// Resolve a provider, applying a reasoning-effort task classification.
+///
+/// Used to cap per-node executor reasoning below the planner's depth: in the
+/// two-model coordinator the planner already performs the deep reasoning, so
+/// paying DeepSeek Max-effort reasoning tokens on every mechanical execution
+/// node is wasteful. A `High` ceiling keeps executor reasoning useful while
+/// preventing a `Max` config default from applying to each node.
+fn resolve_provider_for_task(
+    config: &dpronix_config::Config,
+    model: &Option<String>,
+    task: Option<dpronix_provider::factory::ReasoningEffort>,
 ) -> anyhow::Result<Arc<dyn dpronix_provider::Provider>> {
     let provider_cfg = if let Some(ref model_name) = model {
         config
@@ -184,7 +269,7 @@ fn resolve_provider(
             .ok_or_else(|| anyhow::anyhow!("no providers configured"))?
     };
 
-    Ok(dpronix_provider::factory::create_provider(provider_cfg)?.into())
+    Ok(dpronix_provider::factory::create_provider_for_task(provider_cfg, task)?.into())
 }
 
 /// Build an agent with built-in tools registered.
@@ -193,7 +278,10 @@ fn build_agent(
     _model: Option<&str>,
     config: &dpronix_config::Config,
     max_steps: usize,
-) -> dpronix_agent::Agent {
+) -> anyhow::Result<dpronix_agent::Agent> {
+    let workspace_root = std::env::current_dir().unwrap_or_default();
+    let security = dpronix_runtime::build_security_context(config, &workspace_root)?;
+
     let mut agent = dpronix_agent::Agent::new(
         provider,
         if max_steps > 0 {
@@ -201,7 +289,9 @@ fn build_agent(
         } else {
             config.agent.max_steps
         },
-    );
+    )
+    .with_workspace_root(workspace_root)
+    .with_security(security);
 
     if let Some(ref sp) = config.agent.system_prompt {
         agent = agent.with_system_prompt(sp.clone());
@@ -212,7 +302,7 @@ fn build_agent(
         agent.register_tool(tool);
     }
 
-    agent
+    Ok(agent)
 }
 
 /// Stream events from any [`Runner`] to stdout in a consistent format.
@@ -293,6 +383,12 @@ fn truncate_str(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
     } else {
-        format!("{}…", &s[..max])
+        // P0 Fix: Find the largest UTF-8 character boundary at or before max.
+        // `&s[..max]` panics if max splits a multi-byte character.
+        let mut end = max;
+        while end > 0 && !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}…", &s[..end])
     }
 }

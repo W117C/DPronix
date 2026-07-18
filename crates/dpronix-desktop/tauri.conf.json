@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegram/tauri/dev/crates/tauri-cli/schema.json",
   "productName": "DPronix",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "identifier": "com.dpronix.desktop",
   "build": {
-    "beforeDevCommand": "cd frontend && npm run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "cd frontend && npm run build",
     "frontendDist": "./frontend/dist"

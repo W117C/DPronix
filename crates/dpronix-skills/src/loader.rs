@@ -67,7 +67,10 @@ impl SkillLoader {
     /// to parse are skipped with a warning.
     pub fn load_all(&self) -> anyhow::Result<Vec<Skill>> {
         if !self.root.exists() {
-            tracing::debug!("skill directory {:?} does not exist — returning empty", self.root);
+            tracing::debug!(
+                "skill directory {:?} does not exist — returning empty",
+                self.root
+            );
             return Ok(Vec::new());
         }
 
@@ -117,7 +120,7 @@ fn parse_skill_file(path: &Path) -> anyhow::Result<Skill> {
     let (frontmatter_yaml, body) = split_frontmatter(&raw)
         .with_context(|| format!("invalid frontmatter in {}", path.display()))?;
 
-    let fm: SkillFrontmatter = serde_yaml::from_str(&frontmatter_yaml)
+    let fm: SkillFrontmatter = serde_yml::from_str(&frontmatter_yaml)
         .with_context(|| format!("invalid YAML frontmatter in {}", path.display()))?;
 
     let body = body.trim().to_string();
@@ -170,7 +173,8 @@ mod tests {
 
     #[test]
     fn parse_minimal_skill() {
-        let raw = "---\nname: test-skill\ndescription: A test skill\n---\n\nYou are a test assistant.";
+        let raw =
+            "---\nname: test-skill\ndescription: A test skill\n---\n\nYou are a test assistant.";
         let (yaml, body) = split_frontmatter(raw).unwrap();
         assert!(yaml.contains("name: test-skill"));
         assert!(body.contains("You are a test assistant"));
@@ -179,10 +183,7 @@ mod tests {
     #[test]
     fn parse_skill_with_tools() {
         let raw = "---\nname: reviewer\ndescription: Code review\ntools_allowed:\n  - read_file\n  - grep\n---\n\nBe thorough.";
-        let fm: SkillFrontmatter = serde_yaml::from_str(
-            &split_frontmatter(raw).unwrap().0,
-        )
-        .unwrap();
+        let fm: SkillFrontmatter = serde_yml::from_str(&split_frontmatter(raw).unwrap().0).unwrap();
         assert_eq!(fm.name, "reviewer");
         assert_eq!(fm.tools_allowed, vec!["read_file", "grep"]);
     }
@@ -190,8 +191,7 @@ mod tests {
     #[test]
     fn parse_skill_with_model() {
         let raw = "---\nname: planner\ndescription: Plan tasks\nmodel: claude-opus-4-8\n---\n\nPlan carefully.";
-        let fm: SkillFrontmatter =
-            serde_yaml::from_str(&split_frontmatter(raw).unwrap().0).unwrap();
+        let fm: SkillFrontmatter = serde_yml::from_str(&split_frontmatter(raw).unwrap().0).unwrap();
         assert_eq!(fm.model.unwrap(), "claude-opus-4-8");
     }
 

@@ -2,7 +2,7 @@
 
 use dpronix_core::chunk::Chunk;
 use dpronix_core::{Message, Role, RunInput, RunOutput};
-use dpronix_provider::Provider;
+use dpronix_provider::{Provider, ValidatedRequest};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -92,11 +92,7 @@ impl MockProvider {
 
 #[async_trait::async_trait]
 impl Provider for MockProvider {
-    async fn generate(
-        &self,
-        _messages: &[Message],
-        _tools: &[&dyn dpronix_core::Tool],
-    ) -> anyhow::Result<Message> {
+    async fn generate(&self, _validated: ValidatedRequest<'_>) -> anyhow::Result<Message> {
         Ok(Message {
             role: Role::Assistant,
             content: "mock response".to_string(),
@@ -109,8 +105,7 @@ impl Provider for MockProvider {
 
     async fn stream(
         &self,
-        _messages: &[Message],
-        _tools: &[&dyn dpronix_core::Tool],
+        _validated: ValidatedRequest<'_>,
     ) -> anyhow::Result<dpronix_core::chunk::ChunkStream> {
         let mut lock = self.responses.lock().unwrap();
         let chunks = if lock.len() > 1 {
@@ -157,10 +152,7 @@ impl MockRunner {
 
 #[async_trait::async_trait]
 impl dpronix_core::Runner for MockRunner {
-    async fn run_stream(
-        &self,
-        _input: RunInput,
-    ) -> anyhow::Result<dpronix_core::RunEventStream> {
+    async fn run_stream(&self, _input: RunInput) -> anyhow::Result<dpronix_core::RunEventStream> {
         let events: Vec<anyhow::Result<dpronix_core::RunEvent>> =
             self.events.iter().map(|e| Ok(e.clone())).collect();
         Ok(Box::pin(tokio_stream::iter(events)))

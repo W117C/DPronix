@@ -1,11 +1,8 @@
-use crate::types::{
-    ChatCompletionRequest, ChatCompletionResponse, OpenAIFunction, OpenAIRequestTool,
-    StreamResponse,
-};
-use crate::{Provider, ProviderError};
+use crate::types::{ChatCompletionResponse, OpenAIFunction, OpenAIRequestTool, StreamResponse};
+use crate::{Provider, ProviderError, ValidatedRequest};
 use anyhow::Context;
 use async_trait::async_trait;
-use dpronix_core::chunk::{Chunk, ChunkStream, Usage};
+use dpronix_core::chunk::{Chunk, ChunkStream};
 use dpronix_core::{Message, Tool};
 use reqwest::Client;
 use std::env;
@@ -73,10 +70,12 @@ impl OpenAIProvider {
     }
 
     fn build_tools(&self, tools: &[&dyn Tool]) -> Option<Vec<OpenAIRequestTool>> {
-        let schemas: Vec<_> = tools.iter().map(|t| t.schema()).collect();
+        let mut schemas: Vec<_> = tools.iter().map(|t| t.schema()).collect();
         if schemas.is_empty() {
             return None;
         }
+        // Sort by name for cache-stable tool ordering
+        schemas.sort_by(|a, b| a.name.cmp(&b.name));
         let oai_tools: Vec<OpenAIRequestTool> = schemas
             .iter()
             .map(|s| OpenAIRequestTool {
@@ -91,44 +90,65 @@ impl OpenAIProvider {
         Some(oai_tools)
     }
 
-    fn build_request(&self, messages: &[Message], tools: &[&dyn Tool], stream: bool) -> serde_json::Value {
+    fn build_request(
+        &self,
+        messages: &[Message],
+        tools: &[&dyn Tool],
+        stream: bool,
+    ) -> serde_json::Value {
         // Merge extra_body with thinking mode parameter
-        let mut extra = self.extra_body.clone().unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+        let mut extra = self
+            .extra_body
+            .clone()
+            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
         if self.thinking_enabled {
             if let serde_json::Value::Object(ref mut map) = extra {
-                map.insert("thinking".to_string(), serde_json::json!({"type": "enabled"}));
+                map.insert(
+                    "thinking".to_string(),
+                    serde_json::json!({"type": "enabled"}),
+                );
             }
         }
-        let extra_body = if extra.as_object().map_or(false, |o| !o.is_empty()) { Some(extra) } else { None };
+        let extra_body = if extra.as_object().is_some_and(|o| !o.is_empty()) {
+            Some(extra)
+        } else {
+            None
+        };
 
         let mut req = serde_json::json!({
             "model": self.model,
             "messages": messages,
             "stream": stream,
         });
+        // Ask DeepSeek to include usage statistics (cache hit/miss tokens +
+        // reasoning tokens) in the final streaming chunk.
+        if stream {
+            req["stream_options"] = serde_json::json!({"include_usage": true});
+        }
         if let Some(tools) = self.build_tools(tools) {
             req["tools"] = serde_json::json!(tools);
         }
         if let Some(ref effort) = self.reasoning_effort {
             req["reasoning_effort"] = serde_json::json!(effort);
         }
-        if let Some(ref eb) = extra_body {
-            if let serde_json::Value::Object(ref eb_map) = eb {
-                for (k, v) in eb_map {
-                    req[k] = v.clone();
-                }
+        if let Some(serde_json::Value::Object(ref eb_map)) = extra_body {
+            for (k, v) in eb_map {
+                req[k] = v.clone();
             }
         }
         req
     }
 
-    async fn send_request(
-        &self,
-        body: &serde_json::Value,
-    ) -> anyhow::Result<reqwest::Response> {
+    async fn send_request(&self, body: &serde_json::Value) -> anyhow::Result<reqwest::Response> {
         let url = format!("{}/chat/completions", self.base_url);
 
-        info!("POST {} (stream={})", url, body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false));
+        info!(
+            "POST {} (stream={})",
+            url,
+            body.get("stream")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        );
 
         let response = self
             .client
@@ -155,7 +175,9 @@ impl OpenAIProvider {
 
 #[async_trait]
 impl Provider for OpenAIProvider {
-    async fn generate(&self, messages: &[Message], tools: &[&dyn Tool]) -> anyhow::Result<Message> {
+    async fn generate(&self, validated: ValidatedRequest<'_>) -> anyhow::Result<Message> {
+        let messages = validated.messages;
+        let tools = validated.tools;
         let body = self.build_request(messages, tools, false);
         let response = self.send_request(&body).await?;
 
@@ -163,6 +185,21 @@ impl Provider for OpenAIProvider {
             .json()
             .await
             .context("failed to parse provider response")?;
+
+        // Surface DeepSeek token accounting for auxiliary (non-streaming) calls
+        // so context-cache efficiency and billed reasoning tokens stay visible
+        // even though this path returns only the message body.
+        if let Some(ref u) = resp_body.usage {
+            info!(
+                prompt_tokens = u.prompt_tokens,
+                completion_tokens = u.completion_tokens,
+                total_tokens = u.total_tokens,
+                cache_hit_tokens = u.cache_hit_tokens,
+                cache_miss_tokens = u.cache_miss_tokens,
+                reasoning_tokens = u.reasoning_tokens(),
+                "deepseek usage (non-streaming generate)"
+            );
+        }
 
         let choice = resp_body
             .choices
@@ -173,11 +210,9 @@ impl Provider for OpenAIProvider {
         Ok(choice.message)
     }
 
-    async fn stream(
-        &self,
-        messages: &[Message],
-        tools: &[&dyn Tool],
-    ) -> anyhow::Result<ChunkStream> {
+    async fn stream(&self, validated: ValidatedRequest<'_>) -> anyhow::Result<ChunkStream> {
+        let messages = validated.messages;
+        let tools = validated.tools;
         let body = self.build_request(messages, tools, true);
         let response = self.send_request(&body).await?;
 
@@ -284,16 +319,11 @@ async fn process_sse_line(
         return Ok(()); // skip unparseable lines (e.g. keepalive)
     };
 
-    // Final usage chunk
+    // Final usage chunk — map all DeepSeek-specific accounting (context-cache
+    // hit/miss and reasoning tokens) via the shared conversion so the stream
+    // never drops billed reasoning tokens.
     if let Some(ref u) = resp.usage {
-        let _ = tx.send(Ok(Chunk::Usage(Usage {
-            prompt_tokens: u.prompt_tokens,
-            completion_tokens: u.completion_tokens,
-            total_tokens: u.total_tokens,
-            cache_hit_tokens: 0,
-            cache_miss_tokens: 0,
-            reasoning_tokens: 0,
-        }))).await;
+        let _ = tx.send(Ok(Chunk::Usage(u.to_usage()))).await;
     }
 
     for choice in resp.choices {
@@ -311,10 +341,12 @@ async fn process_sse_line(
             // --- Reasoning content (DeepSeek thinking mode) ---
             if let Some(ref reasoning) = delta.reasoning_content {
                 if !reasoning.is_empty() {
-                    let _ = tx.send(Ok(Chunk::ReasoningDelta {
-                        text: reasoning.clone(),
-                        signature: None,
-                    })).await;
+                    let _ = tx
+                        .send(Ok(Chunk::ReasoningDelta {
+                            text: reasoning.clone(),
+                            signature: None,
+                        }))
+                        .await;
                 }
             }
 
@@ -336,10 +368,12 @@ async fn process_sse_line(
                             if let Some(ref func) = tc.function {
                                 if let Some(ref name) = func.name {
                                     acc.name = Some(name.clone());
-                                    let _ = tx.send(Ok(Chunk::ToolCallStart {
-                                        id: id.clone(),
-                                        name: name.clone(),
-                                    })).await;
+                                    let _ = tx
+                                        .send(Ok(Chunk::ToolCallStart {
+                                            id: id.clone(),
+                                            name: name.clone(),
+                                        }))
+                                        .await;
                                 }
                             }
                         }
@@ -350,10 +384,12 @@ async fn process_sse_line(
                         if let Some(ref args) = func.arguments {
                             if !args.is_empty() {
                                 let call_id = acc.id.clone().unwrap_or_default();
-                                let _ = tx.send(Ok(Chunk::ToolCallDelta {
-                                    id: call_id.clone(),
-                                    args_delta: args.clone(),
-                                })).await;
+                                let _ = tx
+                                    .send(Ok(Chunk::ToolCallDelta {
+                                        id: call_id.clone(),
+                                        args_delta: args.clone(),
+                                    }))
+                                    .await;
                                 acc.arguments.push_str(args);
                             }
                         }
@@ -378,11 +414,13 @@ async fn flush_pending_tool_calls(
 ) -> anyhow::Result<()> {
     for acc in tool_acc.drain(..) {
         if let (Some(id), Some(name)) = (acc.id, acc.name) {
-            let _ = tx.send(Ok(Chunk::ToolCallEnd {
-                id,
-                name,
-                arguments: acc.arguments,
-            })).await;
+            let _ = tx
+                .send(Ok(Chunk::ToolCallEnd {
+                    id,
+                    name,
+                    arguments: acc.arguments,
+                }))
+                .await;
         }
     }
     Ok(())
@@ -397,8 +435,8 @@ mod tests {
     use super::*;
     use dpronix_core::tool::ToolContext;
     use dpronix_core::types::ToolSchema;
-    use std::sync::Arc;
 
+    #[allow(dead_code)]
     struct NoopTool;
 
     #[async_trait]
@@ -445,11 +483,25 @@ data: [DONE]
         }
 
         // Should have: TextDelta("Hello"), TextDelta(" world"), Done
-        let text_chunks: Vec<&str> = chunks.iter()
-            .filter_map(|c| if let Chunk::TextDelta(t) = c { Some(t.as_str()) } else { None })
+        let text_chunks: Vec<&str> = chunks
+            .iter()
+            .filter_map(|c| {
+                if let Chunk::TextDelta(t) = c {
+                    Some(t.as_str())
+                } else {
+                    None
+                }
+            })
             .collect();
-        assert_eq!(text_chunks, vec!["Hello", " world"], "should parse two text deltas");
-        assert!(chunks.iter().any(|c| matches!(c, Chunk::Done)), "should end with Done");
+        assert_eq!(
+            text_chunks,
+            vec!["Hello", " world"],
+            "should parse two text deltas"
+        );
+        assert!(
+            chunks.iter().any(|c| matches!(c, Chunk::Done)),
+            "should end with Done"
+        );
     }
 
     /// Verify that streaming tool_calls are accumulated into ToolCallEnd.
@@ -485,15 +537,22 @@ data: [DONE]
         }
 
         // Should have: ToolCallStart, ToolCallDelta, ToolCallDelta, ToolCallEnd, Done
-        let has_start = chunks.iter().any(|c| matches!(c, Chunk::ToolCallStart { name, .. } if name == "read_file"));
-        let has_end = chunks.iter().any(|c| matches!(c, Chunk::ToolCallEnd { name, .. } if name == "read_file"));
+        let has_start = chunks
+            .iter()
+            .any(|c| matches!(c, Chunk::ToolCallStart { name, .. } if name == "read_file"));
+        let has_end = chunks
+            .iter()
+            .any(|c| matches!(c, Chunk::ToolCallEnd { name, .. } if name == "read_file"));
         assert!(has_start, "should emit ToolCallStart for read_file");
         assert!(has_end, "should emit ToolCallEnd for read_file");
 
         // Find the ToolCallEnd and verify accumulated arguments
         for chunk in &chunks {
             if let Chunk::ToolCallEnd { arguments, .. } = chunk {
-                assert!(arguments.contains("src/main.rs"), "arguments should be fully accumulated");
+                assert!(
+                    arguments.contains("src/main.rs"),
+                    "arguments should be fully accumulated"
+                );
                 break;
             }
         }
@@ -528,9 +587,80 @@ data: [DONE]
         }
 
         // Should have: ReasoningDelta, TextDelta, Done
-        let has_reasoning = chunks.iter().any(|c| matches!(c, Chunk::ReasoningDelta { text, .. } if text == "thinking step 1..."));
-        let has_text = chunks.iter().any(|c| matches!(c, Chunk::TextDelta(t) if t == "Final answer"));
-        assert!(has_reasoning, "should parse reasoning_content as ReasoningDelta");
+        let has_reasoning = chunks.iter().any(
+            |c| matches!(c, Chunk::ReasoningDelta { text, .. } if text == "thinking step 1..."),
+        );
+        let has_text = chunks
+            .iter()
+            .any(|c| matches!(c, Chunk::TextDelta(t) if t == "Final answer"));
+        assert!(
+            has_reasoning,
+            "should parse reasoning_content as ReasoningDelta"
+        );
         assert!(has_text, "should parse content as TextDelta");
+    }
+
+    /// Verify the final DeepSeek usage frame is parsed into a Chunk::Usage that
+    /// preserves context-cache hit/miss tokens AND the billed reasoning tokens
+    /// nested under `completion_tokens_details`.
+    #[tokio::test]
+    async fn parse_sse_deepseek_usage_with_reasoning_tokens() {
+        let sse_data = r#"data: {"choices":[{"index":0,"delta":{"content":"hi"}}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":40,"total_tokens":140,"prompt_cache_hit_tokens":64,"prompt_cache_miss_tokens":36,"completion_tokens_details":{"reasoning_tokens":25}}}
+
+data: [DONE]
+"#;
+
+        let (tx, mut rx) = mpsc::channel(64);
+        let mut tool_acc = Vec::new();
+
+        for line in sse_data.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            process_sse_line(trimmed, &tx, &mut tool_acc).await.unwrap();
+        }
+
+        drop(tx);
+
+        let mut chunks = Vec::new();
+        while let Some(chunk) = rx.recv().await {
+            chunks.push(chunk.unwrap());
+        }
+
+        let usage = chunks
+            .iter()
+            .find_map(|c| match c {
+                Chunk::Usage(u) => Some(u),
+                _ => None,
+            })
+            .expect("should emit a Chunk::Usage");
+
+        assert_eq!(usage.prompt_tokens, 100);
+        assert_eq!(usage.completion_tokens, 40);
+        assert_eq!(usage.total_tokens, 140);
+        assert_eq!(usage.cache_hit_tokens, 64, "cache hit tokens must survive");
+        assert_eq!(
+            usage.cache_miss_tokens, 36,
+            "cache miss tokens must survive"
+        );
+        assert_eq!(
+            usage.reasoning_tokens, 25,
+            "billed reasoning tokens from completion_tokens_details must survive"
+        );
+    }
+
+    /// Usage frames without the nested `completion_tokens_details` object must
+    /// degrade gracefully to zero reasoning tokens (non-reasoning models).
+    #[test]
+    fn response_usage_reasoning_tokens_defaults_to_zero() {
+        let json = r#"{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}"#;
+        let usage: crate::types::ResponseUsage = serde_json::from_str(json).unwrap();
+        assert_eq!(usage.reasoning_tokens(), 0);
+        let mapped = usage.to_usage();
+        assert_eq!(mapped.reasoning_tokens, 0);
+        assert_eq!(mapped.total_tokens, 15);
     }
 }

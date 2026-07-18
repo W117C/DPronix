@@ -1,3 +1,9 @@
+//! # Permission — Policy-based tool execution gating
+//!
+//! Implements allow/ask/deny permission gates for every tool invocation.
+//! Supports per-tool rules, user confirmation prompts, and session-level
+//! permission caching.
+
 use dpronix_core::tool::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

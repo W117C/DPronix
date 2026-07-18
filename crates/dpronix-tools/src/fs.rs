@@ -1,14 +1,13 @@
 use async_trait::async_trait;
-use crate::snippet;
 use dpronix_checkpoint::CheckpointManager;
 use dpronix_core::{Tool, ToolContext, ToolSchema};
 use serde::Deserialize;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::Mutex;
 
 // ---------------------------------------------------------------------------
 // ReadFileTool
@@ -47,8 +46,12 @@ impl Tool for ReadFileTool {
     }
 
     async fn execute(&self, ctx: &ToolContext, args: &str) -> anyhow::Result<String> {
+        dpronix_security::context::enforce_capability(
+            ctx,
+            dpronix_security::capability::Capability::FileRead,
+        )?;
         let parsed: ReadFileArgs = serde_json::from_str(args)?;
-        let path = sanitize_path(&parsed.path)?;
+        let path = sanitize_path(&ctx.workspace_root, &parsed.path)?;
 
         if ctx.cancellation.is_cancelled() {
             anyhow::bail!("cancelled");
@@ -67,8 +70,12 @@ impl Tool for ReadFileTool {
         drop(tracker);
 
         // Return content with snippet marker for edit validation
-        Ok(format!("{}\n\n[SNIPPED ID: {}]\n[Snippet generated from: {}]\n",
-            content.trim_end(), snippet_id, path.display()))
+        Ok(format!(
+            "{}\n\n[SNIPPET ID: {}]\n[Snippet generated from: {}]\n",
+            content.trim_end(),
+            snippet_id,
+            path.display()
+        ))
     }
 }
 
@@ -80,7 +87,6 @@ impl Tool for ReadFileTool {
 pub struct WriteFileTool {
     checkpointer: Option<Arc<Mutex<CheckpointManager>>>,
 }
-
 
 impl WriteFileTool {
     pub fn new() -> Self {
@@ -128,8 +134,12 @@ impl Tool for WriteFileTool {
     }
 
     async fn execute(&self, ctx: &ToolContext, args: &str) -> anyhow::Result<String> {
+        dpronix_security::context::enforce_capability(
+            ctx,
+            dpronix_security::capability::Capability::FileWrite,
+        )?;
         let parsed: WriteFileArgs = serde_json::from_str(args)?;
-        let path = sanitize_path(&parsed.path)?;
+        let path = sanitize_path(&ctx.workspace_root, &parsed.path)?;
 
         if ctx.cancellation.is_cancelled() {
             anyhow::bail!("cancelled");
@@ -171,7 +181,6 @@ pub struct EditFileTool {
     checkpointer: Option<Arc<Mutex<CheckpointManager>>>,
 }
 
-
 impl EditFileTool {
     pub fn new() -> Self {
         Self::default()
@@ -202,6 +211,7 @@ impl Tool for EditFileTool {
             name: "edit_file".to_string(),
             description: "Replaces the first exact match of SEARCH with REPLACE in a file. \
                  SEARCH must match exactly including whitespace and indentation. \
+                 You MUST provide the snippet_id from a prior read_file call. \
                  If a checkpoint manager is configured, the file is snapshotted before editing."
                 .to_string(),
             parameters: json!({
@@ -221,17 +231,29 @@ impl Tool for EditFileTool {
                     },
                     "snippet_id": {
                         "type": "string",
-                        "description": "Optional snippet ID from read_file."
+                        "description": "Snippet ID from a prior read_file call. \
+                             Required — you MUST call read_file first and pass its snippet_id here."
                     }
                 },
-                "required": ["path", "search", "replace"]
+                "required": ["path", "search", "replace", "snippet_id"]
             }),
         }
     }
 
     async fn execute(&self, ctx: &ToolContext, args: &str) -> anyhow::Result<String> {
+        dpronix_security::context::enforce_capability(
+            ctx,
+            dpronix_security::capability::Capability::FileWrite,
+        )?;
         let parsed: EditFileArgs = serde_json::from_str(args)?;
-        let path = sanitize_path(&parsed.path)?;
+        let path = sanitize_path(&ctx.workspace_root, &parsed.path)?;
+
+        // snippet_id is now required — enforce read-then-edit contract
+        let snip_id = parsed.snippet_id.ok_or_else(|| {
+            anyhow::anyhow!(
+                "snippet_id is required. You MUST call read_file first and pass its snippet_id to edit_file."
+            )
+        })?;
 
         if ctx.cancellation.is_cancelled() {
             anyhow::bail!("cancelled");
@@ -244,16 +266,17 @@ impl Tool for EditFileTool {
 
         let original = fs::read_to_string(&path).await?;
 
-        // Validate snippet if provided (deepcode-cli style)
-        if let Some(ref snip_id) = parsed.snippet_id {
+        // Validate snippet (mandatory — read-then-edit contract)
+        {
             let tracker = crate::snippet::global_tracker().lock().await;
-            if let Err(current) = tracker.validate(snip_id, &original) {
+            if let Err(current) = tracker.validate(&snip_id, &original) {
                 drop(tracker);
-                return Ok(format!("SNIPPED STALE: The file has changed since you read it.\n                    Current content:\n---\n{}\n---\nPlease re-read.", current));
+                return Ok(format!("SNIPPET STALE: The file has changed since you read it.\nCurrent content:\n---\n{}\n---\nPlease re-read the file first.", current));
             }
             drop(tracker);
         }
 
+        // Attempt search/replace
         if let Some(pos) = original.find(&parsed.search) {
             let edited = format!(
                 "{}{}{}",
@@ -275,10 +298,28 @@ impl Tool for EditFileTool {
 
             Ok(format!("replaced 1 occurrence in {}", path.display()))
         } else {
-            anyhow::bail!(
-                "SEARCH block not found in {}. The exact text must match including whitespace.",
+            // Search not found — provide candidate lines for LLM-assisted recovery
+            let candidates: Vec<String> = original
+                .lines()
+                .enumerate()
+                .filter(|(_, l)| {
+                    let search_trimmed = parsed.search.trim();
+                    l.contains(search_trimmed) || l.trim() == search_trimmed
+                })
+                .take(5)
+                .map(|(i, l)| format!("  line {}: {}", i + 1, l.trim()))
+                .collect();
+
+            let mut msg = format!(
+                "SEARCH block not found in {}.\nThe exact text must match including whitespace.\n",
                 path.display()
             );
+            if !candidates.is_empty() {
+                msg.push_str("\nSimilar lines found (check whitespace/indentation):\n");
+                msg.push_str(&candidates.join("\n"));
+            }
+            msg.push_str("\n\nPlease read the file again with read_file to get a fresh snippet and see current content.");
+            anyhow::bail!("{}", msg);
         }
     }
 }
@@ -291,7 +332,6 @@ impl Tool for EditFileTool {
 pub struct MoveFileTool {
     checkpointer: Option<Arc<Mutex<CheckpointManager>>>,
 }
-
 
 impl MoveFileTool {
     pub fn new() -> Self {
@@ -339,9 +379,13 @@ impl Tool for MoveFileTool {
     }
 
     async fn execute(&self, ctx: &ToolContext, args: &str) -> anyhow::Result<String> {
+        dpronix_security::context::enforce_capability(
+            ctx,
+            dpronix_security::capability::Capability::FileWrite,
+        )?;
         let parsed: MoveFileArgs = serde_json::from_str(args)?;
-        let src = sanitize_path(&parsed.source)?;
-        let dst = sanitize_path(&parsed.destination)?;
+        let src = sanitize_path(&ctx.workspace_root, &parsed.source)?;
+        let dst = sanitize_path(&ctx.workspace_root, &parsed.destination)?;
 
         if ctx.cancellation.is_cancelled() {
             anyhow::bail!("cancelled");
@@ -369,29 +413,40 @@ impl Tool for MoveFileTool {
 // Path sanitization
 // ---------------------------------------------------------------------------
 
-/// Basic path sanitization: reject obviously malicious paths.
-fn sanitize_path(raw: &str) -> anyhow::Result<PathBuf> {
-    let path = Path::new(raw);
+/// Helper wrapper calling the centralized sanitize_path helper.
+fn sanitize_path(workspace: &Path, raw: &str) -> anyhow::Result<PathBuf> {
+    dpronix_security::path::sanitize_path(workspace, raw)
+}
 
-    if raw.is_empty() {
-        anyhow::bail!("empty path");
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_path_traversal() {
+        let cwd = std::env::current_dir().unwrap();
+
+        // Non-existent path inside workspace should succeed
+        let ok_path = "src/nonexistent_file_xyz.rs";
+        let res = sanitize_path(&cwd, ok_path).unwrap();
+        assert_eq!(res, cwd.join(ok_path));
+
+        // Path containing .. but staying inside workspace should succeed
+        let ok_traversal = "src/../src/nonexistent_file_xyz.rs";
+        let res = sanitize_path(&cwd, ok_traversal).unwrap();
+        assert_eq!(res, cwd.join("src/nonexistent_file_xyz.rs"));
+
+        // Non-existent path traversing outside workspace should be blocked
+        let bad_path = "src/../../outside_workspace_xyz.rs";
+        let res = sanitize_path(&cwd, bad_path);
+        assert!(
+            res.is_err(),
+            "Should block path traversal outside workspace: {:?}",
+            res
+        );
+        assert!(res
+            .unwrap_err()
+            .to_string()
+            .contains("escapes workspace root"));
     }
-    if raw.contains('\0') {
-        anyhow::bail!("path contains null byte");
-    }
-
-    let resolved = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(path)
-    };
-
-    // Canonicalize if exists, otherwise clean up .. and .
-    let canonical = if resolved.exists() {
-        std::fs::canonicalize(&resolved)?
-    } else {
-        resolved.components().collect::<PathBuf>()
-    };
-
-    Ok(canonical)
 }

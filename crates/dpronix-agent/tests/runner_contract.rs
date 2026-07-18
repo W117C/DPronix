@@ -2,8 +2,8 @@
 //!
 //! Every Runner implementation must pass these behavioral contracts.
 
-use dpronix_agent::Agent;
 use dpronix_agent::test_utils::{MockProvider, MockRunner};
+use dpronix_agent::Agent;
 use dpronix_core::runner::{RunEvent, RunInput, RunOutput, Runner};
 use std::sync::Arc;
 use tokio_stream::StreamExt;
@@ -51,9 +51,7 @@ async fn agent_runner_streams_events() {
     }
 
     assert!(events.len() >= 2);
-    assert!(events
-        .iter()
-        .any(|e| matches!(e, RunEvent::TextDelta(_))));
+    assert!(events.iter().any(|e| matches!(e, RunEvent::TextDelta(_))));
     assert!(events.iter().any(|e| matches!(e, RunEvent::Done(_))));
 }
 

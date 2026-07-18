@@ -4,12 +4,12 @@
 //!   1. Hard-coded defaults
 //!   2. `~/.dpronix/config.toml`  (user)
 //!   3. `./dpronix.toml`          (project)
-//!   4. Environment variables       (REASONIX_*)
+//!   4. Environment variables       (DPRONIX_*)
 //!   5. CLI flags                   (applied by caller)
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use serde_json;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -50,6 +50,11 @@ pub struct Config {
     /// Sandbox settings for shell and file tools.
     #[serde(default)]
     pub sandbox: SandboxConfig,
+
+    /// Security policy for tool execution (capabilities, path/command/domain
+    /// allow-lists, resource limits).
+    #[serde(default)]
+    pub security: SecurityConfig,
 
     /// MCP server definitions.
     #[serde(default)]
@@ -98,8 +103,16 @@ pub struct ProviderConfig {
 
     /// Enable DeepSeek thinking mode.
     /// When true, sends extra_body: {"thinking": {"type": "enabled"}}.
+    /// For DeepSeek providers, defaults to true in the provider factory
+    /// even when this field is absent from config.
     #[serde(default)]
     pub thinking_enabled: bool,
+
+    /// DeepSeek reasoning effort level: "low", "medium", "high", or "max".
+    /// Controls the depth of the model's internal reasoning chain.
+    /// Defaults to "high" for DeepSeek providers in the factory.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
 
     /// Extra JSON body fields to include in every request to this provider.
     /// Merged into the request body at the top level.
@@ -126,7 +139,7 @@ pub struct HeaderEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelConfig {
-    /// Model identifier (e.g. "deepseek-chat", "claude-sonnet-5-20251001").
+    /// Model identifier (e.g. "deepseek-v4-flash", "claude-sonnet-5-20251001").
     pub name: String,
 
     /// Which provider this model uses.
@@ -320,6 +333,64 @@ impl Default for SandboxConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Security
+// ---------------------------------------------------------------------------
+
+/// Security policy for tool execution.
+///
+/// Controls which capabilities tools may exercise, filesystem path
+/// confinement, command/domain allow-lists, and resource limits.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SecurityConfig {
+    /// Capabilities to DISABLE (deny). Any name not in this set remains
+    /// granted. Recognized names (case-insensitive):
+    /// `file_read`, `file_write`, `command_execute`, `network_access`,
+    /// `mcp_invoke`, `memory_read`, `memory_write`.
+    #[serde(default)]
+    pub disabled_capabilities: Vec<String>,
+
+    /// Path prefixes tools are allowed to touch (in addition to the
+    /// workspace root, which is always allowed).
+    #[serde(default)]
+    pub allowed_paths: Vec<String>,
+
+    /// Path prefixes tools are never allowed to touch (deny takes
+    /// precedence over allow).
+    #[serde(default)]
+    pub denied_paths: Vec<String>,
+
+    /// Command prefixes the shell tool may execute. Empty = allow all.
+    #[serde(default)]
+    pub allowed_commands: Vec<String>,
+
+    /// Domains the web_fetch tool may contact. Empty = allow all.
+    #[serde(default)]
+    pub allowed_domains: Vec<String>,
+
+    /// Resource limits. Fields left as `None` fall back to library defaults.
+    #[serde(default)]
+    pub limits: ResourceLimitsConfig,
+}
+
+/// Optional resource-limits overrides. Any field left `None` keeps the
+/// library default.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ResourceLimitsConfig {
+    #[serde(default)]
+    pub max_files: Option<usize>,
+    #[serde(default)]
+    pub max_file_size: Option<u64>,
+    #[serde(default)]
+    pub max_total_read_bytes: Option<u64>,
+    #[serde(default)]
+    pub max_execution_time_secs: Option<u64>,
+    #[serde(default)]
+    pub max_output_bytes: Option<u64>,
+    #[serde(default)]
+    pub max_tool_calls: Option<usize>,
+}
+
+// ---------------------------------------------------------------------------
 // MCP Server
 // ---------------------------------------------------------------------------
 
@@ -414,14 +485,15 @@ impl Config {
         self.agent.merge(other.agent);
         self.permissions.merge(other.permissions);
         self.sandbox.merge(other.sandbox);
+        self.security.merge(other.security);
     }
 
-    /// Apply REASONIX_* environment variable overrides.
+    /// Apply DPRONIX_* environment variable overrides.
     fn apply_env_overrides(&mut self) {
-        if let Ok(val) = std::env::var("REASONIX_MODEL") {
+        if let Ok(val) = std::env::var("DPRONIX_MODEL") {
             self.default_model = Some(val);
         }
-        if let Ok(val) = std::env::var("REASONIX_MAX_STEPS") {
+        if let Ok(val) = std::env::var("DPRONIX_MAX_STEPS") {
             if let Ok(n) = val.parse() {
                 self.default_max_steps = Some(n);
             }
@@ -499,6 +571,50 @@ impl SandboxConfig {
     }
 }
 
+impl SecurityConfig {
+    fn merge(&mut self, other: SecurityConfig) {
+        if !other.disabled_capabilities.is_empty() {
+            self.disabled_capabilities = other.disabled_capabilities;
+        }
+        if !other.allowed_paths.is_empty() {
+            self.allowed_paths = other.allowed_paths;
+        }
+        if !other.denied_paths.is_empty() {
+            self.denied_paths = other.denied_paths;
+        }
+        if !other.allowed_commands.is_empty() {
+            self.allowed_commands = other.allowed_commands;
+        }
+        if !other.allowed_domains.is_empty() {
+            self.allowed_domains = other.allowed_domains;
+        }
+        self.limits.merge(other.limits);
+    }
+}
+
+impl ResourceLimitsConfig {
+    fn merge(&mut self, other: ResourceLimitsConfig) {
+        if other.max_files.is_some() {
+            self.max_files = other.max_files;
+        }
+        if other.max_file_size.is_some() {
+            self.max_file_size = other.max_file_size;
+        }
+        if other.max_total_read_bytes.is_some() {
+            self.max_total_read_bytes = other.max_total_read_bytes;
+        }
+        if other.max_execution_time_secs.is_some() {
+            self.max_execution_time_secs = other.max_execution_time_secs;
+        }
+        if other.max_output_bytes.is_some() {
+            self.max_output_bytes = other.max_output_bytes;
+        }
+        if other.max_tool_calls.is_some() {
+            self.max_tool_calls = other.max_tool_calls;
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -551,13 +667,14 @@ mod tests {
                 name: "deepseek".into(),
                 kind: "openai".into(),
                 base_url: Some("https://api.deepseek.com".into()),
-                model: Some("deepseek-chat".into()),
+                model: Some("deepseek-v4-flash".into()),
                 api_key_env: Some("DEEPSEEK_API_KEY".into()),
                 api_key: None,
                 timeout_secs: 120,
                 max_retries: 3,
                 headers: vec![],
                 thinking_enabled: false,
+                reasoning_effort: None,
                 extra_body: None,
             }],
             ..Config::default()
@@ -565,5 +682,51 @@ mod tests {
 
         assert!(cfg.find_provider("deepseek").is_some());
         assert!(cfg.find_provider("nonexistent").is_none());
+    }
+
+    #[test]
+    fn security_config_merge_preserves_defaults() {
+        let base = Config::default();
+        // 默认：所有能力均未禁用，工作区外无额外路径/命令/域名。
+        assert!(base.security.disabled_capabilities.is_empty());
+        assert!(base.security.allowed_paths.is_empty());
+        assert!(base.security.denied_paths.is_empty());
+        assert!(base.security.allowed_commands.is_empty());
+        assert!(base.security.allowed_domains.is_empty());
+        assert!(base.security.limits.max_files.is_none());
+    }
+
+    #[test]
+    fn security_config_merge_overrides_lists_and_limits() {
+        let mut base = Config::default();
+        let override_cfg = Config {
+            security: crate::SecurityConfig {
+                disabled_capabilities: vec!["file_write".into(), "network_access".into()],
+                allowed_paths: vec!["/tmp/build".into()],
+                denied_paths: vec!["/tmp/build/secret".into()],
+                allowed_commands: vec!["git".into()],
+                allowed_domains: vec!["api.github.com".into()],
+                limits: crate::ResourceLimitsConfig {
+                    max_files: Some(42),
+                    max_execution_time_secs: Some(60),
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
+
+        base.merge(override_cfg);
+
+        assert_eq!(base.security.disabled_capabilities.len(), 2);
+        assert!(base
+            .security
+            .disabled_capabilities
+            .contains(&"file_write".to_string()));
+        assert_eq!(base.security.allowed_paths, vec!["/tmp/build".to_string()]);
+        assert_eq!(base.security.allowed_commands, vec!["git".to_string()]);
+        assert_eq!(base.security.limits.max_files, Some(42));
+        assert_eq!(base.security.limits.max_execution_time_secs, Some(60));
+        // 未覆盖的字段保持未设置
+        assert!(base.security.limits.max_file_size.is_none());
     }
 }

@@ -72,7 +72,32 @@ impl Memory {
     /// Compact the conversation by replacing all messages with a single
     /// summary digest. Useful when the working set grows beyond the
     /// context window and a full history is no longer helpful.
-    pub fn compact(&mut self, digest: String) {
+    ///
+    /// `reasoning_summary` optionally preserves a condensed version of the
+    /// model's thinking from the compacted turns, which helps maintain
+    /// DeepSeek thinking mode continuity across compaction boundaries.
+    pub fn compact(&mut self, digest: String, reasoning_summary: Option<String>) {
+        // Safety: check for unresolved must_replay turns before compacting.
+        // If any assistant message with tool_calls still has reasoning that
+        // hasn't been consumed, compaction would break the DeepSeek V4
+        // reasoning_content contract, causing HTTP 400 on the next request.
+        let pending_replay: Vec<&Message> = self
+            .messages
+            .iter()
+            .filter(|m| {
+                m.reasoning_block()
+                    .map(|rb| rb.must_replay)
+                    .unwrap_or(false)
+            })
+            .collect();
+        if !pending_replay.is_empty() {
+            tracing::warn!(
+                count = pending_replay.len(),
+                "compacting while must_replay reasoning blocks exist — \
+                 this may break DeepSeek V4 tool call continuity"
+            );
+        }
+
         self.messages.clear();
         self.shrunk_messages.clear();
         self.call_counts.clear();
@@ -85,10 +110,20 @@ impl Memory {
             name: None,
             tool_calls: None,
             tool_call_id: None,
-            reasoning_content: None,
+            reasoning_content: reasoning_summary,
         });
 
         self.bump_activity();
+    }
+
+    /// Check whether the conversation has any unresolved must_replay
+    /// reasoning blocks that must not be compacted away.
+    pub fn has_pending_must_replay(&self) -> bool {
+        self.messages.iter().any(|m| {
+            m.reasoning_block()
+                .map(|rb| rb.must_replay)
+                .unwrap_or(false)
+        })
     }
 
     /// Return the duration since last activity, used by idle-compaction.
@@ -119,6 +154,11 @@ impl Memory {
 
     /// Turn-end compaction: shrink large tool results (Head/Tail Truncation).
     /// Does not summarize the entire log, preserving LLM Prefix Caches.
+    ///
+    /// # P0 Fix: Bounds-checked string slicing with UTF-8 boundary awareness.
+    /// Previously, `head_len` and `tail_len` could exceed `content.len()`, causing a panic.
+    /// Now clamped to valid boundaries and uses floor_char_boundary to avoid splitting
+    /// multi-byte UTF-8 characters.
     pub fn shrink_large_results(&mut self, threshold_chars: usize) {
         for msg in self.messages.iter_mut().rev() {
             if msg.role != Role::Tool {
@@ -134,19 +174,27 @@ impl Memory {
                 continue;
             }
 
-            if msg.content.len() > threshold_chars {
-                self.full_results.insert(call_id.clone(), msg.content.clone());
+            let tlen = msg.content.len();
 
-                let head_len = (threshold_chars as f32 * TRUNCATION_HEAD_RATIO) as usize;
-                let tail_len = threshold_chars - head_len;
+            // P0 FIX: Only truncate if content is actually larger than threshold
+            // and ensure head_len + tail_len never exceeds content length.
+            if tlen > threshold_chars {
+                self.full_results
+                    .insert(call_id.clone(), msg.content.clone());
 
-                let tlen = msg.content.len();
-                let head_end = msg.content.floor_char_boundary(head_len);
+                let head_len = ((threshold_chars as f32 * TRUNCATION_HEAD_RATIO) as usize).min(tlen);
+                let tail_len = threshold_chars.saturating_sub(head_len).min(tlen - head_len);
+
+                // P0 FIX: Use floor_char_boundary to avoid splitting UTF-8 characters
+                let head_end = floor_char_boundary_safe(&msg.content, head_len);
+                let tail_start = tlen.saturating_sub(tail_len);
+                let tail_start = floor_char_boundary_safe_from_end(&msg.content, tail_start);
+
                 let head = &msg.content[..head_end];
-                let tail_start = msg.content.ceil_char_boundary(tlen.saturating_sub(tail_len));
                 let tail = &msg.content[tail_start..];
 
-                let omitted = msg.content.len() - head_len - tail_len;
+                let omitted = tlen - head_end - (tlen - tail_start);
+
                 msg.content = format!(
                     "{}\n\n... [{} bytes omitted, use fetch_full_result(\"{}\") to retrieve] ...\n\n{}",
                     head, omitted, call_id, tail
@@ -161,6 +209,10 @@ impl Memory {
     /// Atomic sliding window fallback.
     /// Drops the oldest contiguous "Turn Chunk" (User -> Assistant -> ToolResults)
     /// to avoid breaking provider API tool_use invariants.
+    ///
+    /// # P1 Fix: Preserve tool_call/tool_result pairing.
+    /// Now tracks tool_call_ids in the Assistant message and ensures
+    /// corresponding Tool messages are dropped together.
     pub fn slide_window(&mut self) {
         let mut dropped_ids = Vec::new();
 
@@ -169,12 +221,51 @@ impl Memory {
                 break;
             }
 
+            // P1 FIX: When dropping an Assistant message with tool_calls,
+            // collect all tool_call_ids so we can also drop their Tool results
+            if front.role == Role::Assistant {
+                if let Some(ref tool_calls) = front.tool_calls {
+                    for tc in tool_calls {
+                        dropped_ids.push(tc.id.clone());
+                    }
+                }
+            }
+
+            // Track tool_call_id of Tool messages being dropped
             if let Some(id) = &front.tool_call_id {
                 dropped_ids.push(id.clone());
             }
 
             self.messages.pop_front();
         }
+
+        // P1 FIX: After sliding, check if any remaining Tool messages
+        // have lost their corresponding Assistant tool_call.
+        // If so, drop those orphaned Tool messages too.
+        let remaining_call_ids: HashSet<String> = self
+            .messages
+            .iter()
+            .filter_map(|m| {
+                if m.role == Role::Assistant {
+                    m.tool_calls.as_ref().map(|tcs| {
+                        tcs.iter().map(|tc| tc.id.clone()).collect::<Vec<_>>()
+                    })
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect();
+
+        self.messages.retain(|m| {
+            if m.role == Role::Tool {
+                if let Some(ref id) = m.tool_call_id {
+                    // Keep only if the corresponding Assistant tool_call still exists
+                    return remaining_call_ids.contains(id);
+                }
+            }
+            true
+        });
 
         for id in dropped_ids {
             self.full_results.remove(&id);
@@ -191,4 +282,29 @@ impl Memory {
     fn bump_activity(&mut self) {
         self.last_activity = Some(Instant::now());
     }
+}
+
+/// Find the largest UTF-8 character boundary at or before `max`.
+/// Equivalent to the unstable `str::floor_char_boundary` but works on stable Rust.
+fn floor_char_boundary_safe(s: &str, max: usize) -> usize {
+    if max >= s.len() {
+        return s.len();
+    }
+    let mut idx = max;
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
+/// Find the smallest UTF-8 character boundary at or after `min`.
+fn floor_char_boundary_safe_from_end(s: &str, min: usize) -> usize {
+    if min >= s.len() {
+        return s.len();
+    }
+    let mut idx = min;
+    while idx < s.len() && !s.is_char_boundary(idx) {
+        idx += 1;
+    }
+    idx
 }

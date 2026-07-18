@@ -16,12 +16,16 @@ impl GoldenSnapshot {
             Ok(())
         } else {
             match self.mode {
-                SnapshotMode::Strict => {
-                    Err(format!("CRITICAL: Strict Snapshot Mismatch! Expected: {}, Actual: {}", self.expected_hash, actual_hash))
-                }
+                SnapshotMode::Strict => Err(format!(
+                    "CRITICAL: Strict Snapshot Mismatch! Expected: {}, Actual: {}",
+                    self.expected_hash, actual_hash
+                )),
                 SnapshotMode::Evolution => {
                     // Log a warning and allow migration report generation, but don't hard fail.
-                    Err(format!("WARNING: Evolution Snapshot Mismatch. Expected: {}, Actual: {}", self.expected_hash, actual_hash))
+                    Err(format!(
+                        "WARNING: Evolution Snapshot Mismatch. Expected: {}, Actual: {}",
+                        self.expected_hash, actual_hash
+                    ))
                 }
             }
         }

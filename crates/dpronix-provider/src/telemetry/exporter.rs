@@ -14,8 +14,8 @@ pub fn export_telemetry(data: OTelExportSchema) {
         tokens_budget = %data.tokens.budget
     );
     let _enter = span.enter();
-    
-    // In a real OpenTelemetry setup, tracing-opentelemetry will automatically 
+
+    // In a real OpenTelemetry setup, tracing-opentelemetry will automatically
     // pick this up and export it to Grafana/Jaeger/Tempo.
     info!("Emitted cognitive state telemetry payload.");
 }

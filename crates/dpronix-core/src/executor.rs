@@ -93,7 +93,10 @@ impl GraphExecutor {
             if wave.len() == 1 {
                 // Single node — execute inline
                 let node_id = &wave[0];
-                let node = graph.nodes.get(node_id).unwrap();
+                let node = graph
+                    .nodes
+                    .get(node_id)
+                    .ok_or_else(|| anyhow::anyhow!("node must exist"))?;
 
                 match self.clone().execute_node(node, &outputs).await {
                     Ok(output) => {
@@ -109,7 +112,11 @@ impl GraphExecutor {
                 // Multiple nodes — execute concurrently via JoinSet
                 let mut set = JoinSet::new();
                 for node_id in wave {
-                    let node = graph.nodes.get(node_id).unwrap().clone();
+                    let node = graph
+                        .nodes
+                        .get(node_id)
+                        .ok_or_else(|| anyhow::anyhow!("node must exist"))?
+                        .clone();
                     let outputs_snapshot = outputs.clone();
                     let this = Arc::clone(&self);
 

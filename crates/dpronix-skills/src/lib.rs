@@ -75,10 +75,7 @@ impl Tool for SkillTool {
 
     async fn execute(&self, _ctx: &ToolContext, _args: &str) -> anyhow::Result<String> {
         let mut output = String::new();
-        output.push_str(&format!(
-            "# Skill Activated: {}\n\n",
-            self.skill.name
-        ));
+        output.push_str(&format!("# Skill Activated: {}\n\n", self.skill.name));
         output.push_str(&self.skill.system_prompt);
 
         if !self.skill.tools_allowed.is_empty() {

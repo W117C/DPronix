@@ -33,7 +33,11 @@ impl IncrementalMerkleTree {
         if self.leaves.is_empty() {
             return PromptHash::default();
         }
-        self.layers.last().and_then(|l| l.first()).cloned().unwrap_or_default()
+        self.layers
+            .last()
+            .and_then(|l| l.first())
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Internal O(log n) update
@@ -55,7 +59,7 @@ impl IncrementalMerkleTree {
                 combined.extend_from_slice(&left_hash.0);
                 combined.extend_from_slice(&current_hash.0);
                 current_hash = DefaultHasher::hash(&combined);
-                
+
                 // Move up
                 level += 1;
                 idx /= 2;
@@ -70,7 +74,7 @@ impl IncrementalMerkleTree {
                     self.layers[level].push(current_hash.clone());
                 }
             } else {
-                // We are a left child. If there's no right child yet, 
+                // We are a left child. If there's no right child yet,
                 // we just promote ourselves directly (or combine with default hash,
                 // but standard incremental trees often just pass the left child up if unbalanced).
                 // Here we just duplicate the left child hash to keep it simple and balanced-equivalent.
@@ -78,14 +82,14 @@ impl IncrementalMerkleTree {
                 combined.extend_from_slice(&current_hash.0);
                 combined.extend_from_slice(&current_hash.0); // Duplicate for unbalanced right
                 current_hash = DefaultHasher::hash(&combined);
-                
+
                 level += 1;
                 idx /= 2;
-                
+
                 if level >= self.layers.len() {
                     self.layers.push(Vec::new());
                 }
-                
+
                 if idx < self.layers[level].len() {
                     self.layers[level][idx] = current_hash.clone();
                 } else {

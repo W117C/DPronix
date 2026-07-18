@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Multi-agent orchestration: GOAP planning, swarm coordination, and agent federation for DeepSeek-V4."
+readme = "README.md"
+documentation = "https://docs.rs/dpronix-orch/0.3.0"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -16,9 +19,11 @@ tracing = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-dpronix-core = { version = "0.1.0", path = "../dpronix-core" }
-dpronix-agent = { version = "0.1.0", path = "../dpronix-agent" }
-dpronix-provider = { version = "0.1.0", path = "../dpronix-provider" }
-dpronix-config = { version = "0.1.0", path = "../dpronix-config" }
-dpronix-tools = { version = "0.1.0", path = "../dpronix-tools" }
-dpronix-event = { version = "0.1.0", path = "../dpronix-event" }
+rand = { workspace = true }
+reqwest = { workspace = true }
+dpronix-core = { version = "0.3.0", path = "../dpronix-core" }
+dpronix-agent = { version = "0.3.0", path = "../dpronix-agent" }
+dpronix-provider = { version = "0.3.0", path = "../dpronix-provider" }
+dpronix-config = { version = "0.3.0", path = "../dpronix-config" }
+dpronix-tools = { version = "0.3.0", path = "../dpronix-tools" }
+dpronix-event = { version = "0.3.0", path = "../dpronix-event" }

@@ -105,3 +105,59 @@ pub async fn discover_mcp_tools(
         .collect();
     Ok(adapters)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connection::McpConnection;
+    use crate::types::ToolDef;
+
+    fn make_tool_def(name: &str) -> ToolDef {
+        ToolDef {
+            name: name.into(),
+            description: None,
+            input_schema: serde_json::json!({"type": "object"}),
+        }
+    }
+
+    fn make_adapter(server: &str, tool_def: &ToolDef) -> McpToolAdapter {
+        let conn = Arc::new(McpConnection::new_test());
+        let client = Arc::new(McpClient::new(conn));
+        McpToolAdapter::new(server, tool_def, client)
+    }
+
+    #[test]
+    fn test_adapter_namespaced_name() {
+        let tool = make_tool_def("read_file");
+        let adapter = make_adapter("my-server", &tool);
+        assert_eq!(adapter.schema().name, "mcp__my-server__read_file");
+    }
+
+    #[test]
+    fn test_adapter_server_name() {
+        let tool = make_tool_def("read_file");
+        let adapter = make_adapter("my-server", &tool);
+        assert_eq!(adapter.server_name(), "my-server");
+    }
+
+    #[test]
+    fn test_adapter_original_name() {
+        let tool = make_tool_def("read_file");
+        let adapter = make_adapter("my-server", &tool);
+        assert_eq!(adapter.original_name(), "read_file");
+    }
+
+    #[test]
+    fn test_adapter_description_fallback() {
+        let tool = make_tool_def("my_tool");
+        let adapter = make_adapter("srv", &tool);
+        assert!(adapter.schema().description.contains("MCP tool: my_tool"));
+    }
+
+    #[test]
+    fn test_adapter_read_only_default() {
+        let tool = make_tool_def("any");
+        let adapter = make_adapter("srv", &tool);
+        assert!(!adapter.read_only());
+    }
+}
