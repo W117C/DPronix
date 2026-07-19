@@ -1,4 +1,4 @@
-# Contributing to deepseeknova
+# Contributing to DeepseekNova
 
 ## Setup
 

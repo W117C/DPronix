@@ -12,12 +12,12 @@ documentation = "https://docs.rs/deepseeknova-runtime/0.4.0"
 anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-deepseeknova-core = { version = "0.4.0", path = "../deepseeknova-core" }
-deepseeknova-config = { version = "0.4.0", path = "../deepseeknova-config" }
-deepseeknova-provider = { version = "0.4.0", path = "../deepseeknova-provider" }
-deepseeknova-agent = { version = "0.4.0", path = "../deepseeknova-agent" }
-deepseeknova-tools = { version = "0.4.0", path = "../deepseeknova-tools" }
-deepseeknova-permission = { version = "0.4.0", path = "../deepseeknova-permission" }
-deepseeknova-context = { version = "0.4.0", path = "../deepseeknova-context" }
-deepseeknova-event = { version = "0.4.0", path = "../deepseeknova-event" }
-deepseeknova-security = { version = "0.4.0", path = "../deepseeknova-security" }
+deepseeknova-core = { workspace = true }
+deepseeknova-config = { workspace = true }
+deepseeknova-provider = { workspace = true }
+deepseeknova-agent = { workspace = true }
+deepseeknova-tools = { workspace = true }
+deepseeknova-permission = { workspace = true }
+deepseeknova-context = { workspace = true }
+deepseeknova-event = { workspace = true }
+deepseeknova-security = { workspace = true }

@@ -62,6 +62,23 @@ All notable changes to DeepseekNova will be documented in this file.
 ### 代码质量
 - 修复 clippy type_complexity 警告（提取 ApprovalSender / ApprovalChannel 类型别名）
 - 修复 set_hook 中 event move 后借用错误
+
+### 重构
+
+#### commands.rs 拆分为 17 子模块
+- `commands.rs` (1296 行) → `commands/` 目录 (18 个文件, 1372 行)
+- 按职责拆分: core/sessions/skills/workspace/sandbox/network/permissions/hooks/mcp/subagents/diagnostics/billing/knowledge/memory/settings/tabs/misc
+- `lib.rs` 的 `generate_handler!` 改用完整路径 `commands::module::function`
+
+#### SettingsModal.tsx 拆分为 14 组件
+- `SettingsModal.tsx` (898 行) → 主组件 (114 行) + `settings/` 目录 (15 个文件)
+- 提取 `Shared.tsx` (SettingRow/StatBox/Toggle) 供所有子组件复用
+- 每个设置分区独立文件，平均 50 行
+
+### 依赖维护
+- 关闭 12 个 Dependabot breaking change PR（opentelemetry-stdout/tracing-opentelemetry 升级导致 trait 不兼容）
+- 尝试 workspace dependencies pin 统一依赖版本，因 tonic 0.12 引入的旧版本导致编译失败已回退
+- 25 组重复依赖来自 tonic 0.12（opentelemetry-otlp 引入），需等上游升级
 - cargo fmt 全格式化
 
 ### CI/CD

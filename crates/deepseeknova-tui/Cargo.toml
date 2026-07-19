@@ -15,7 +15,7 @@ tokio-stream = { workspace = true }
 tracing = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
-deepseeknova-core = { version = "0.4.0", path = "../deepseeknova-core" }
+deepseeknova-core = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }

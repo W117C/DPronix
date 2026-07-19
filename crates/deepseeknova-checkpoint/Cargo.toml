@@ -18,4 +18,4 @@ chrono = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 walkdir = { workspace = true }
-deepseeknova-core = { version = "0.4.0", path = "../deepseeknova-core" }
+deepseeknova-core = { workspace = true }
