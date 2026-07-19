@@ -85,7 +85,7 @@ ratatui = "0.29"
 crossterm = "0.28"
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.7", features = ["cors"] }
 futures = "0.3"
 criterion = { version = "0.5", default-features = false }
 serde_yml = "0.0"
