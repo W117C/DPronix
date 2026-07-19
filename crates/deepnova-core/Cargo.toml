@@ -26,6 +26,9 @@ futures-core = { workspace = true }
 tracing = { workspace = true }
 async-trait = { workspace = true }
 rand = { workspace = true }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde_yaml = "0.9"
+tempfile = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
