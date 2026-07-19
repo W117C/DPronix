@@ -1,21 +1,62 @@
+import { useState, useEffect } from "react";
+import { listSubagents } from "../../bridge";
 
+interface AgentInfo {
+  name: string;
+  desc: string;
+  model: string;
+  status: string;
+  tasks: number;
+}
 
 export default function SubAgentsSettings() {
-  const agents = [
-    { name: "code-reviewer", desc: "代码审查专家", model: "deepseek-v4-pro", status: "idle", tasks: 12 },
-    { name: "bug-hunter", desc: "Bug 检测和根因分析", model: "deepseek-v4-pro", status: "idle", tasks: 5 },
-    { name: "test-generator", desc: "自动生成测试用例", model: "deepseek-v4-flash", status: "idle", tasks: 8 },
-    { name: "refactor-assistant", desc: "代码重构建议", model: "deepseek-v4-pro", status: "running", tasks: 3 },
-    { name: "frontend-design", desc: "前端 UI/UX 设计", model: "deepseek-v4-flash", status: "idle", tasks: 7 },
-    { name: "doc-generator", desc: "文档生成", model: "deepseek-v4-flash", status: "idle", tasks: 15 },
-  ];
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [isMock, setIsMock] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    listSubagents()
+      .then((data: any) => {
+        if (data?.mock) {
+          setIsMock(true);
+          setAgents([]);
+        } else if (Array.isArray(data)) {
+          setAgents(data);
+        } else if (data?.agents) {
+          setAgents(data.agents);
+        }
+      })
+      .catch(() => setAgents([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const runningCount = agents.filter(a => a.status === "running").length;
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span style={{ fontSize: 10, color: "var(--text-3)" }}>子智能体（{agents.length} 个，{agents.filter(a => a.status === "running").length} 个运行中）</span>
-        <button className="btn btn-primary" style={{ fontSize: 11 }}>+ 创建</button>
+        <span style={{ fontSize: 10, color: "var(--text-3)" }}>
+          子智能体（{agents.length} 个{runningCount > 0 ? `，${runningCount} 个运行中` : ""}）
+        </span>
+        <button className="btn btn-primary" style={{ fontSize: 11 }} disabled>+ 创建</button>
       </div>
+
+      {isMock && (
+        <div style={{ fontSize: 10, color: "var(--amber)", marginBottom: 8, padding: "4px 8px", background: "var(--bg-3)", borderRadius: 4 }}>
+          ⚠ 演示模式 — 子智能体状态尚未接入编排层后端
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ textAlign: "center", padding: 20, color: "var(--text-3)", fontSize: 11 }}>加载中…</div>
+      )}
+
+      {!loading && agents.length === 0 && !isMock && (
+        <div className="empty-state" style={{ padding: 20 }}>
+          <div className="empty-state-icon">🤖</div>
+          <div className="empty-state-text">暂无子智能体</div>
+        </div>
+      )}
 
       {agents.map((a) => (
         <div key={a.name} className="card" style={{ padding: "8px 10px", marginBottom: 6 }}>
@@ -40,4 +81,3 @@ export default function SubAgentsSettings() {
     </div>
   );
 }
-

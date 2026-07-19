@@ -31,12 +31,16 @@ pub async fn set_network_config(config: NetworkConfig) -> Result<(), String> {
     Ok(())
 }
 
+/// Network diagnostics — currently returns placeholder data.
+/// TODO: implement real connectivity checks (ping API endpoints, measure latency).
 #[tauri::command]
 pub async fn network_diagnostics() -> Result<serde_json::Value, String> {
-    let results = serde_json::json!([
-        {"name": "DeepSeek API", "status": "pass", "detail": "128ms"},
-        {"name": "GitHub API", "status": "pass", "detail": "45ms"},
-        {"name": "MCP: web-search", "status": "warn", "detail": "未连接"},
-    ]);
-    Ok(results)
+    Ok(serde_json::json!({
+        "mock": true,
+        "results": [
+            {"name": "DeepSeek API", "status": "pending", "detail": "未实际检测"},
+            {"name": "GitHub API", "status": "pending", "detail": "未实际检测"},
+            {"name": "MCP: web-search", "status": "pending", "detail": "未实际检测"},
+        ]
+    }))
 }
