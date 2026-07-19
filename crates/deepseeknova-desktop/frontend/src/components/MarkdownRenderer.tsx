@@ -1,48 +1,71 @@
 /**
- * MarkdownRenderer — renders assistant text with syntax-highlighted code blocks.
+ * MarkdownRenderer.tsx — Markdown 渲染 + 代码块复制
  */
-import { useMemo } from "react";
+
+import { useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { Components } from "react-markdown";
 
-/** Inline code */
-function InlineCode({ children }: { children?: React.ReactNode }) {
-  return <code className="dp-md-inline">{children}</code>;
-}
+export default function MarkdownRenderer({ content }: { content: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
 
-/** Fenced code block with language label */
-function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
-  const lang = className?.replace("language-", "") ?? "";
-  const code = String(children).replace(/\n$/, "");
-  return (
-    <div className="dp-md-code">
-      {lang && <div className="lang">{lang}</div>}
-      <pre><code className={className}>{code}</code></pre>
-    </div>
-  );
-}
+  const handleCopy = useCallback((text: string, id: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(id);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  }, []);
 
-interface MarkdownRendererProps {
-  content: string;
-}
+  const components: Components = {
+    pre({ children, ...props }) {
+      // 提取代码文本
+      const codeEl = children as React.ReactElement;
+      const codeText =
+        typeof codeEl?.props?.children === "string"
+          ? codeEl.props.children
+          : Array.isArray(codeEl?.props?.children)
+            ? codeEl.props.children.join("")
+            : "";
 
-export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
-  const components = useMemo(() => ({
-    code({ className, children, ...props }: any) {
-      const inline = !className;
-      if (inline) return <InlineCode {...props}>{children}</InlineCode>;
-      return <CodeBlock className={className}>{children}</CodeBlock>;
+      const id = `code-${Math.random().toString(36).slice(2, 9)}`;
+
+      return (
+        <div className="code-block">
+          <div className="code-block-header">
+            <span>{codeEl?.props?.className?.replace("language-", "") || "code"}</span>
+            <button className="copy-btn" onClick={() => handleCopy(codeText, id)}>
+              {copied === id ? "✓ 已复制" : "复制"}
+            </button>
+          </div>
+          <div className="code-block-content">
+            <pre {...props}>{children}</pre>
+          </div>
+        </div>
+      );
     },
-    a({ href, children }: any) {
-      return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+    code({ children, ...props }) {
+      return <code {...props}>{children}</code>;
     },
-  }), []);
+    a({ children, href, ...props }) {
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue)" }} {...props}>
+          {children}
+        </a>
+      );
+    },
+    table({ children, ...props }) {
+      return (
+        <div style={{ overflowX: "auto" }}>
+          <table {...props}>{children}</table>
+        </div>
+      );
+    },
+  };
 
   return (
-    <div className="dp-md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
-      </ReactMarkdown>
-    </div>
+    <ReactMarkdown components={components} remarkPlugins={[remarkGfm]}>
+      {content}
+    </ReactMarkdown>
   );
 }

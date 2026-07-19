@@ -135,3 +135,44 @@ export interface AppConfig {
   max_steps: number;
   auto_mode: boolean;
 }
+
+// ── 扩展类型（UI 层使用）────────────────────────────────────
+
+/** TODO 项 */
+export interface TodoItem {
+  id: string;
+  text: string;
+  done: boolean;
+  status: "pending" | "in_progress" | "completed";
+}
+
+/** 记忆项 */
+export interface MemoryItem {
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
+/** 文件树节点 */
+export interface FileTreeNode {
+  name: string;
+  path: string;
+  isDir: boolean;
+  children?: FileTreeNode[];
+  gitStatus?: "modified" | "added" | "deleted" | "untracked";
+}
+
+/** Slash 命令 */
+export interface SlashCommand {
+  name: string;
+  description: string;
+}
+
+/** 工具调用信息 */
+export interface ToolCallInfo {
+  id: string;
+  name: string;
+  args: string;
+  result?: string;
+  status: "running" | "done" | "error";
+}

@@ -1,71 +1,37 @@
 /**
- * DiffView — Lazy-loadable unified diff view component.
- *
- * Uses dp-* CSS variables for theme-aware colors.
+ * editors/DiffView.tsx — Diff 视图（着色显示）
  */
 
-import React from "react";
-
-interface DiffViewProps {
-  diff: string;
-  maxHeight?: string;
+interface DiffLine {
+  type: "add" | "del" | "context";
+  text: string;
 }
 
-const DiffView: React.FC<DiffViewProps> = ({ diff, maxHeight }) => {
-  const lines = diff.split("\n");
-
-  const containerStyle: React.CSSProperties = {
-    margin: 0,
-    padding: "8px 0",
-    background: "var(--dp-panel)",
-    borderRadius: "var(--dp-radius-sm)",
-    fontSize: "13px",
-    lineHeight: 1.5,
-    overflow: "auto",
-    fontFamily: "var(--dp-font-mono)",
-    ...(maxHeight ? { maxHeight } : {}),
-  };
+export default function DiffView({ diff }: { diff: string }) {
+  const lines: DiffLine[] = diff.split("\n").map((line) => {
+    if (line.startsWith("+")) return { type: "add" as const, text: line };
+    if (line.startsWith("-")) return { type: "del" as const, text: line };
+    return { type: "context" as const, text: line };
+  });
 
   return (
-    <pre style={containerStyle}>
-      {lines.map((line, i) => {
-        let bg = "transparent";
-        let color = "var(--dp-fg)";
-        let prefix = " ";
-
-        if (line.startsWith("+") && !line.startsWith("+++")) {
-          bg = "color-mix(in srgb, var(--dp-success) 18%, transparent)";
-          color = "var(--dp-success)";
-          prefix = "+";
-        } else if (line.startsWith("-") && !line.startsWith("---")) {
-          bg = "color-mix(in srgb, var(--dp-danger) 18%, transparent)";
-          color = "var(--dp-danger)";
-          prefix = "-";
-        } else if (line.startsWith("@")) {
-          bg = "color-mix(in srgb, var(--dp-cyan) 14%, transparent)";
-          color = "var(--dp-cyan)";
-          prefix = "@";
-        }
-
-        return (
-          <div
-            key={i}
-            style={{
-              background: bg,
-              color,
-              padding: "0 16px",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-all",
-              display: "flex",
-            }}
-          >
-            <span style={{ userSelect: "none", width: 20, flexShrink: 0 }}>{prefix}</span>
-            <span>{line.length > 1 ? line.slice(1) : ""}</span>
-          </div>
-        );
-      })}
-    </pre>
+    <div style={{
+      background: "var(--bg-2)",
+      border: "1px solid var(--border-1)",
+      borderRadius: "var(--radius-md)",
+      overflow: "hidden",
+      fontFamily: "var(--font-mono)",
+      fontSize: "13px",
+    }}>
+      {lines.map((line, i) => (
+        <div
+          key={i}
+          className={`diff-line diff-${line.type}`}
+          style={{ padding: "0 8px" }}
+        >
+          {line.text}
+        </div>
+      ))}
+    </div>
   );
-};
-
-export default DiffView;
+}
