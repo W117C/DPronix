@@ -1,88 +1,58 @@
 /**
- * Transcript — renders the conversation in chronological order.
- *
- * Unlike the old App.tsx which split messages into three filtered arrays
- * (breaking tool/reasoning/answer interleaving), this component walks the
- * messages array once and renders each via <MessageItem>.
+ * Transcript.tsx — 消息流（支持流式响应）
  */
-import type { RefObject } from "react";
-import type { Message, ApprovalRequest } from "../types";
-import MessageItem, { ApprovalCard } from "./MessageItem";
 
-interface TranscriptProps {
-  messages: Message[];
-  running?: boolean;
-  pendingApproval?: ApprovalRequest | null;
-  onApprove?: () => void;
-  onReject?: () => void;
-  endRef?: RefObject<HTMLDivElement>;
-}
+import { useRef, useEffect } from "react";
+import { useStore } from "../store";
+import MessageItem from "./MessageItem";
+import ToolCard from "./ToolCard";
+import ReasoningCard from "./ReasoningCard";
+import ApprovalCard from "./ApprovalCard";
+import Welcome from "./Welcome";
 
-export default function Transcript({
-  messages,
-  running,
-  pendingApproval,
-  onApprove,
-  onReject,
-  endRef,
-}: TranscriptProps) {
-  // Empty state hero
-  if (messages.length === 0) {
+export default function Transcript() {
+  const messages = useStore((s) => s.messages);
+  const running = useStore((s) => s.running);
+  const pendingApproval = useStore((s) => s.pendingApproval);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 自动滚动到底部
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  if (messages.length === 0 && !running) {
     return (
-      <div className="dp-thread-inner">
-        <div className="dp-hero">
-          <div className="logo" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
-          </div>
-          <h1>DeepseekNova Desktop</h1>
-          <p>DeepSeek-V4 AI coding agent. Start a conversation below.</p>
-          <div className="hints">
-            <span className="hint">Enter to send</span>
-            <span className="hint">Shift+Enter for newline</span>
-            <span className="hint">Cmd+↑ for history</span>
-          </div>
-        </div>
-        {endRef ? <div ref={endRef} /> : null}
+      <div className="transcript" ref={containerRef}>
+        <Welcome />
       </div>
     );
   }
 
-  // Detect the streaming assistant message id (last assistant msg while running)
-  const streamingId = running
-    ? [...messages].reverse().find((m) => m.role === "assistant")?.id
-    : undefined;
-
   return (
-    <div className="dp-thread-inner">
-      {pendingApproval && onApprove && onReject && (
-        <ApprovalCard
-          title={pendingApproval.title}
-          description={pendingApproval.description ?? undefined}
-          onApprove={onApprove}
-          onReject={onReject}
-        />
-      )}
+    <div className="transcript" ref={containerRef}>
+      {messages.map((msg) => {
+        if (msg.role === "reasoning") {
+          return <ReasoningCard key={msg.id} message={msg} />;
+        }
+        if (msg.role === "tool") {
+          return <ToolCard key={msg.id} message={msg} />;
+        }
+        return <MessageItem key={msg.id} message={msg} />;
+      })}
 
-      {messages.map((msg) => (
-        <MessageItem
-          key={msg.id}
-          message={msg}
-          isStreaming={msg.id === streamingId}
-        />
-      ))}
+      {/* 审批卡片 */}
+      {pendingApproval && <ApprovalCard approval={pendingApproval} />}
 
-      {running && (
-        <div className="dp-loading">
-          <span className="spinner" aria-hidden="true" />
-          <span>working…</span>
+      {/* 加载指示器 */}
+      {running && messages.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0", color: "var(--text-3)" }}>
+          <div className="status-dot running" />
+          <span style={{ fontSize: "12px" }}>Agent 思考中…</span>
         </div>
       )}
-
-      {endRef ? <div ref={endRef} /> : null}
     </div>
   );
 }
