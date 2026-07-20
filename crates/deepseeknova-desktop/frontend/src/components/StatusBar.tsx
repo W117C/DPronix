@@ -5,9 +5,11 @@
 
 import { useStore } from "../store";
 import { useTheme } from "../store/theme";
+import { useI18n } from "../i18n";
 import { useEffect, useState } from "react";
 
 export default function StatusBar() {
+  const { t } = useI18n();
   const status = useStore((s) => s.status);
   const lastUsage = useStore((s) => s.lastUsage);
   const sessionCache = useStore((s) => s.sessionCache);
@@ -33,13 +35,13 @@ export default function StatusBar() {
   return (
     <footer className="status-bar">
       <span className={`status-dot ${status}`} />
-      <span className="status-item">{status === "ready" ? "就绪" : status === "running" ? "运行中" : "错误"}</span>
+      <span className="status-item">{status === "ready" ? t("app.ready") : status === "running" ? t("app.running") : "Error"}</span>
       <span className="status-sep">│</span>
 
       {totalCache > 0 && (
         <>
-          <span className="status-item" title={`命中 ${sessionCache.hit}/${totalCache}`}>
-            {isIcon ? "💡" : "缓存:"}
+          <span className="status-item" title={`Cache ${sessionCache.hit}/${totalCache}`}>
+            {isIcon ? "💡" : "Cache:"}
             <span style={{ color: cacheColor, fontWeight: 600 }}>{cacheRate}%</span>
           </span>
           <span className="status-sep">│</span>
@@ -63,7 +65,7 @@ export default function StatusBar() {
         </>
       ) : (
         <span className="status-item" style={{ color: "var(--text-muted)" }}>
-          {isIcon ? "⚡" : "暂无数据"}
+          {isIcon ? "⚡" : t("panel.empty")}
         </span>
       )}
 

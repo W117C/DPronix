@@ -9,18 +9,22 @@
 
 import { useStore } from "../store";
 import { useState } from "react";
+import { useI18n } from "../i18n";
+import TracePanel from "./TracePanel";
 
 export default function RightPanel() {
+  const { t } = useI18n();
   const collapsed = useStore((s) => s.rightCollapsed);
-  const [activeTab, setActiveTab] = useState<"files" | "knowledge" | "memory">("files");
+  const [activeTab, setActiveTab] = useState<"files" | "knowledge" | "memory" | "trace">("files");
   const [previewFile, setPreviewFile] = useState<string | null>(null);
 
   if (collapsed) return null;
 
   const tabs = [
-    { id: "files" as const, label: "文件", icon: "📁" },
-    { id: "knowledge" as const, label: "知识库", icon: "📚" },
-    { id: "memory" as const, label: "记忆", icon: "🧠" },
+    { id: "files" as const, label: t("panel.files"), icon: "📁" },
+    { id: "knowledge" as const, label: t("panel.knowledge"), icon: "📚" },
+    { id: "memory" as const, label: t("panel.memory"), icon: "🧠" },
+    { id: "trace" as const, label: t("panel.trace"), icon: "◎" },
   ];
 
   return (
@@ -51,6 +55,7 @@ export default function RightPanel() {
         )}
         {activeTab === "knowledge" && <KnowledgePanel />}
         {activeTab === "memory" && <MemoryPanel />}
+        {activeTab === "trace" && <TracePanel />}
       </div>
     </aside>
   );

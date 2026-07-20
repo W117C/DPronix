@@ -13,9 +13,9 @@ build:
 # ── Comprehensive check (CI equivalent) ────────────────────────
 check:
 	cargo fmt --all -- --check
-	cargo clippy --workspace --exclude dpronix-desktop --all-targets -- -D warnings
-	cargo test --workspace --exclude dpronix-desktop
-	cargo doc --workspace --exclude dpronix-desktop --no-deps --document-private-items
+	cargo clippy --workspace --exclude deepseeknova-desktop --all-targets -- -D warnings
+	cargo test --workspace --exclude deepseeknova-desktop
+	cargo doc --workspace --exclude deepseeknova-desktop --no-deps --document-private-items
 
 check-all:
 	cargo fmt --all -- --check
@@ -35,15 +35,15 @@ test-all:
 
 # ── Clippy auto-fix ─────────────────────────────────────────────
 clippy-fix:
-	cargo clippy --workspace --exclude dpronix-desktop --all-targets --fix --allow-dirty
+	cargo clippy --workspace --exclude deepseeknova-desktop --all-targets --fix --allow-dirty
 
 # ── Run ─────────────────────────────────────────────────────────
 run:
-	cargo run --bin dpronix-cli
+	cargo run --bin deepseeknova-cli
 
 # ── Example ─────────────────────────────────────────────────────
 example:
-	cargo run --example quickstart -p dpronix-cli
+	cargo run --example quickstart -p deepseeknova-cli
 
 # ── Release build ───────────────────────────────────────────────
 release:
@@ -69,19 +69,19 @@ cross-linux:
 
 # ── Frontend (Desktop) ─────────────────────────────────────────
 frontend:
-	cd crates/dpronix-desktop/frontend && npm ci && npm run build
+	cd crates/deepseeknova-desktop/frontend && npm ci && npm run build
 
 # ── Desktop app ────────────────────────────────────────────────
 desktop: frontend
-	cargo build -p dpronix-desktop --release
+	cargo build -p deepseeknova-desktop --release
 
 # ── Install CLI binary ─────────────────────────────────────────
 install:
-	cargo install --path crates/dpronix-cli --force
+	cargo install --path crates/deepseeknova-cli --force
 
 # ── Distribution package ───────────────────────────────────────
 dist: release
-	@echo "Release binary at target/release/dpronix-cli"
+	@echo "Release binary at target/release/deepseeknova-cli"
 	@echo "Run 'make desktop' for desktop app build"
 
 # ── Security audit ─────────────────────────────────────────────

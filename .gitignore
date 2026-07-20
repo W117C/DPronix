@@ -6,6 +6,7 @@ node_modules/
 
 # IDE / assistant caches
 .qoder/
+.reasonix/
 
 # Project-local runtime state (topic titles, autoresearch, etc.) is ignored,
 # but the bundled default skills under .dpronix/skills/ ship with the repo.

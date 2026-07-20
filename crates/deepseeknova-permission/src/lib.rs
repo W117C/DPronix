@@ -185,21 +185,154 @@ impl Default for PolicyBuilder {
 // ---------------------------------------------------------------------------
 
 /// PermissionGate is called by Runtime before every tool execution.
+/// Supports session-level caching of user decisions.
 pub struct PermissionGate {
     policy: Policy,
+    /// Session-level cache: (tool_name, subject_hash) → Decision.
+    /// Once a user approves/denies a specific tool+args combo, we remember
+    /// for the rest of the session to avoid repeated prompts.
+    session_cache: std::sync::Mutex<std::collections::HashMap<u64, Decision>>,
+    /// Workspace root for path-based rules.
+    workspace_root: Option<std::path::PathBuf>,
 }
 
 impl PermissionGate {
     pub fn new(policy: Policy) -> Self {
-        Self { policy }
+        Self {
+            policy,
+            session_cache: std::sync::Mutex::new(std::collections::HashMap::new()),
+            workspace_root: None,
+        }
+    }
+
+    /// Set the workspace root for path-based permission checks.
+    pub fn with_workspace_root(mut self, root: impl Into<std::path::PathBuf>) -> Self {
+        self.workspace_root = Some(root.into());
+        self
     }
 
     /// Check whether a tool call should be allowed.
+    /// Uses session cache to avoid repeated prompts for the same operation.
     pub fn check(&self, tool: &dyn Tool, args: &str) -> Decision {
         let args_value: Value = serde_json::from_str(args).unwrap_or(Value::Null);
-        self.policy
-            .decide(&tool.schema().name, tool.read_only(), &args_value)
+        let tool_name = &tool.schema().name;
+
+        // Path-based guard: deny writes outside workspace
+        if !tool.read_only() {
+            if let Some(ref root) = self.workspace_root {
+                if let Some(path) = extract_path(&args_value) {
+                    if !is_within_workspace(root, &path) {
+                        return Decision::Deny;
+                    }
+                }
+            }
+        }
+
+        // Dangerous command detection for shell tools
+        if tool_name == "Bash" || tool_name == "bash" || tool_name == "shell" {
+            if let Some(cmd) = extract_command(&args_value) {
+                if is_dangerous_command(&cmd) {
+                    return Decision::Deny;
+                }
+            }
+        }
+
+        // Check session cache
+        let cache_key = compute_cache_key(tool_name, args);
+        if let Ok(cache) = self.session_cache.lock() {
+            if let Some(cached) = cache.get(&cache_key) {
+                return *cached;
+            }
+        }
+
+        // Evaluate policy
+        self.policy.decide(tool_name, tool.read_only(), &args_value)
     }
+
+    /// Cache a user's decision for this session (called after user responds to Ask).
+    pub fn cache_decision(&self, tool_name: &str, args: &str, decision: Decision) {
+        let key = compute_cache_key(tool_name, args);
+        if let Ok(mut cache) = self.session_cache.lock() {
+            cache.insert(key, decision);
+        }
+    }
+
+    /// Clear the session cache (e.g., on new session).
+    pub fn clear_cache(&self) {
+        if let Ok(mut cache) = self.session_cache.lock() {
+            cache.clear();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Path-based helpers
+// ---------------------------------------------------------------------------
+
+/// Extract a file path from tool arguments.
+fn extract_path(args: &Value) -> Option<String> {
+    if let Value::Object(map) = args {
+        for key in &["path", "file", "file_path", "target", "directory"] {
+            if let Some(val) = map.get(*key) {
+                if let Some(s) = val.as_str() {
+                    return Some(s.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Check if a path is within the workspace root.
+fn is_within_workspace(root: &std::path::Path, path: &str) -> bool {
+    let path_buf = std::path::Path::new(path);
+    // Absolute path: must start with workspace root
+    if path_buf.is_absolute() {
+        path_buf.starts_with(root)
+    } else {
+        // Relative paths are always within workspace
+        !path.contains("..")
+    }
+}
+
+/// Extract a command string from shell tool arguments.
+fn extract_command(args: &Value) -> Option<String> {
+    if let Value::Object(map) = args {
+        if let Some(cmd) = map.get("command") {
+            return cmd.as_str().map(|s| s.to_string());
+        }
+    }
+    if let Value::String(s) = args {
+        return Some(s.clone());
+    }
+    None
+}
+
+/// Detect dangerous shell commands that should always be denied.
+fn is_dangerous_command(cmd: &str) -> bool {
+    let cmd_lower = cmd.to_lowercase();
+    const DANGEROUS_PATTERNS: &[&str] = &[
+        "rm -rf /",
+        "rm -rf /*",
+        "mkfs",
+        "dd if=",
+        ":(){ :|:& };:",  // fork bomb
+        "chmod -r 777 /",
+        "> /dev/sda",
+        "shutdown",
+        "reboot",
+        "format c:",
+    ];
+    DANGEROUS_PATTERNS.iter().any(|p| cmd_lower.contains(p))
+}
+
+/// Compute a cache key for session-level permission caching.
+fn compute_cache_key(tool_name: &str, args: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    tool_name.hash(&mut hasher);
+    args.hash(&mut hasher);
+    hasher.finish()
 }
 
 // ---------------------------------------------------------------------------

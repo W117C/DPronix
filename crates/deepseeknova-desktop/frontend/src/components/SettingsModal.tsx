@@ -63,23 +63,15 @@ export default function SettingsModal() {
       <div className="modal-backdrop" onClick={() => setShowSettings(false)} />
       <div className="modal" style={{ width: 920, height: 640, display: "flex" }}>
         {/* 左侧导航 */}
-        <div className="settings-nav" style={{ width: 200, flexShrink: 0, borderRight: "1px solid var(--border)", overflowY: "auto", padding: "8px 0" }}>
+        <div className="settings-nav">
           {groups.map((g) => (
             <div key={g}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 0.5 }}>
-                {g}
-              </div>
+              <div className="settings-nav-group">{g}</div>
               {sections.filter((s) => s.group === g).map((s) => (
                 <div
                   key={s.id}
+                  className={`settings-nav-item ${section === s.id ? "active" : ""}`}
                   onClick={() => setSection(s.id)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "6px 16px", cursor: "pointer", fontSize: 12,
-                    color: section === s.id ? "var(--accent)" : "var(--text-2)",
-                    background: section === s.id ? "var(--bg-hover)" : "transparent",
-                    borderLeft: section === s.id ? "2px solid var(--accent)" : "2px solid transparent",
-                  }}
                 >
                   <span>{s.icon}</span>
                   <span>{s.label}</span>
@@ -90,7 +82,7 @@ export default function SettingsModal() {
         </div>
 
         {/* 右侧内容 */}
-        <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+        <div className="settings-content">
           {section === "general" && <GeneralSettings />}
           {section === "appearance" && (
             <AppearanceSettings theme={theme} setTheme={setTheme} displayMode={displayMode} toggleDisplayMode={toggleDisplayMode} />

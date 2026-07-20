@@ -16,6 +16,7 @@ import type {
   SessionSummary,
   ContextFile,
   ApprovalRequest,
+  WireEvent,
 } from "../types";
 
 // ── UI 布局状态 ────────────────────────────────────────────
@@ -46,6 +47,12 @@ interface UsageState {
   totalTokens: number;
 }
 
+// ── Trajectory Trace 状态 ────────────────────────────────────
+interface TraceState {
+  traceEvents: { event: WireEvent; ts: number }[];
+  traceStartTime: number | null;
+}
+
 // ── 数据状态 ────────────────────────────────────────────────
 interface DataState {
   sessions: SessionSummary[];
@@ -73,7 +80,7 @@ interface MemoryItem {
 }
 
 // ── 组合 Store ──────────────────────────────────────────────
-type Store = LayoutState & ChatState & UsageState & DataState & {
+type Store = LayoutState & ChatState & UsageState & TraceState & DataState & {
   // 布局操作
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
@@ -95,6 +102,10 @@ type Store = LayoutState & ChatState & UsageState & DataState & {
   // 使用量操作
   setLastUsage: (u: UsageInfo) => void;
   addCacheTokens: (hit: number, miss: number) => void;
+
+  // Trace 操作
+  pushTraceEvent: (e: WireEvent) => void;
+  clearTrace: () => void;
 
   // 数据操作
   setSessions: (s: SessionSummary[]) => void;
@@ -131,6 +142,10 @@ export const useStore = create<Store>()(
     lastUsage: null,
     sessionCache: { hit: 0, miss: 0 },
     totalTokens: 0,
+
+    // ── 初始 Trace ──
+    traceEvents: [],
+    traceStartTime: null,
 
     // ── 初始数据 ──
     sessions: [],
@@ -172,6 +187,14 @@ export const useStore = create<Store>()(
         },
         totalTokens: s.totalTokens + hit + miss,
       })),
+
+    // ── Trace 操作 ──
+    pushTraceEvent: (e) =>
+      set((s) => ({
+        traceEvents: [...s.traceEvents, { event: e, ts: Date.now() }],
+        traceStartTime: s.traceStartTime ?? Date.now(),
+      })),
+    clearTrace: () => set({ traceEvents: [], traceStartTime: null }),
 
     // ── 数据操作 ──
     setSessions: (sessions) => set({ sessions }),

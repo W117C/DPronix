@@ -6,8 +6,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useStore, slashCommands } from "../store";
 import { submitPrompt, cancelRun } from "../bridge";
+import { useI18n } from "../i18n";
 
 export default function Composer() {
+  const { t } = useI18n();
   const input = useStore((s) => s.input);
   const setInput = useStore((s) => s.setInput);
   const running = useStore((s) => s.running);
@@ -58,10 +60,14 @@ export default function Composer() {
     streamingText.current = "";
     streamingMsgId.current = "";
 
+    // Clear previous trace for this run
+    useStore.getState().clearTrace();
+
     addMessage({ id: crypto.randomUUID(), role: "user", content: prompt });
 
     const handlers = {
       onText(text: string) {
+        useStore.getState().pushTraceEvent({ kind: "text_delta", text });
         streamingText.current += text;
         if (!streamingMsgId.current) {
           streamingMsgId.current = crypto.randomUUID();
@@ -70,6 +76,7 @@ export default function Composer() {
         updateMessage(streamingMsgId.current, (m) => ({ ...m, content: streamingText.current }));
       },
       onReasoning(text: string) {
+        useStore.getState().pushTraceEvent({ kind: "reasoning_delta", text, signature: null });
         if (!streamingReasoningId.current) {
           streamingReasoningId.current = crypto.randomUUID();
           addMessage({ id: streamingReasoningId.current, role: "reasoning", content: text, reasoningDone: false });
@@ -78,6 +85,7 @@ export default function Composer() {
         }
       },
       onToolCallStart(id: string, name: string) {
+        useStore.getState().pushTraceEvent({ kind: "tool_call_start", id, name });
         addMessage({ id, role: "tool", content: "", toolName: name, toolId: id });
       },
       onToolCallDelta(id: string, argsDelta: string) {
@@ -88,9 +96,11 @@ export default function Composer() {
         }));
       },
       onToolCallEnd(id: string, name: string, arguments_: string) {
+        useStore.getState().pushTraceEvent({ kind: "tool_call_end", id, name, arguments: arguments_ });
         updateMessage(id, (m) => ({ ...m, toolName: name, content: arguments_, toolArgs: arguments_ }));
       },
       onToolResult(callId: string, result: string) {
+        useStore.getState().pushTraceEvent({ kind: "tool_result", call_id: callId, result });
         updateMessage(callId, (m) => ({ ...m, toolResult: result }));
       },
       onTurnComplete() {
@@ -104,6 +114,7 @@ export default function Composer() {
         useStore.getState().addCacheTokens(usage.cache_hit_tokens, usage.cache_miss_tokens);
       },
       onDone(text: string) {
+        useStore.getState().pushTraceEvent({ kind: "done", text, usage: useStore.getState().lastUsage });
         if (streamingReasoningId.current) {
           updateMessage(streamingReasoningId.current, (m) => ({ ...m, reasoningDone: true }));
           streamingReasoningId.current = "";
@@ -115,6 +126,7 @@ export default function Composer() {
         setRunning(false);
       },
       onError(message: string) {
+        useStore.getState().pushTraceEvent({ kind: "error", message });
         addMessage({ id: crypto.randomUUID(), role: "assistant", content: `⚠️ Error: ${message}` });
         setRunning(false);
       },
@@ -204,7 +216,7 @@ export default function Composer() {
       <textarea
         ref={textareaRef}
         className="composer-input"
-        placeholder={running ? "Agent 运行中…" : "输入消息，按 Enter 发送，Shift+Enter 换行，/ 触发命令…"}
+        placeholder={running ? t("composer.placeholderRunning") : t("composer.placeholder")}
         value={input}
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -251,7 +263,7 @@ export default function Composer() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="6" width="12" height="12" rx="2"/>
             </svg>
-            停止
+            {t("app.stop")}
           </button>
         ) : (
           <button
@@ -263,7 +275,7 @@ export default function Composer() {
               <line x1="22" y1="2" x2="11" y2="13"/>
               <polygon points="22 2 15 22 11 13 2 9 22 2"/>
             </svg>
-            发送
+            {t("app.send")}
           </button>
         )}
       </div>

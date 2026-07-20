@@ -30,10 +30,12 @@
 
 pub mod memory;
 pub mod planner;
+pub mod progress;
 pub mod swarm;
 pub mod types;
 
 pub use memory::*;
 pub use planner::*;
+pub use progress::*;
 pub use swarm::*;
 pub use types::*;
