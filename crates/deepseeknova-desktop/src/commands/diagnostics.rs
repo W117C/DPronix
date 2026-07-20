@@ -65,7 +65,11 @@ pub async fn run_diagnostics() -> Result<serde_json::Value, String> {
         results.push(check(
             "沙箱配置",
             "pass",
-            if sandbox_enabled { "已启用" } else { "未启用（直接执行）" },
+            if sandbox_enabled {
+                "已启用"
+            } else {
+                "未启用（直接执行）"
+            },
         ));
     } else {
         results.push(check("API Key 配置", "skip", "配置加载失败，跳过"));
@@ -96,7 +100,11 @@ pub async fn run_diagnostics() -> Result<serde_json::Value, String> {
             }
         }
     } else {
-        results.push(check("记忆系统", "warn", "数据库尚未创建（首次使用后自动创建）"));
+        results.push(check(
+            "记忆系统",
+            "warn",
+            "数据库尚未创建（首次使用后自动创建）",
+        ));
     }
 
     // 6. Disk space (via statvfs on unix, skip on others)
@@ -119,11 +127,7 @@ pub async fn run_diagnostics() -> Result<serde_json::Value, String> {
     }
 
     // 7. Tauri framework version
-    results.push(check(
-        "Tauri 框架",
-        "pass",
-        &format!("v{}", tauri::VERSION),
-    ));
+    results.push(check("Tauri 框架", "pass", &format!("v{}", tauri::VERSION)));
 
     // 8. Agent kernel version
     results.push(check(
@@ -132,10 +136,7 @@ pub async fn run_diagnostics() -> Result<serde_json::Value, String> {
         &format!("deepseeknova v{}", env!("CARGO_PKG_VERSION")),
     ));
 
-    let pass_count = results
-        .iter()
-        .filter(|r| r["status"] == "pass")
-        .count();
+    let pass_count = results.iter().filter(|r| r["status"] == "pass").count();
     let total = results.len();
 
     Ok(serde_json::json!({

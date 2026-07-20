@@ -102,7 +102,7 @@ Configuration is merged from multiple sources (last wins):
 1. **Built-in defaults**
 2. **User config**: `~/.config/deepseeknova/config.toml`
 3. **Project config**: `.deepseeknova/config.toml`
-4. **Environment variables**: `DPRONIX_PROVIDER_MODEL`, `DPRONIX_MAX_STEPS`, etc.
+4. **Environment variables**: `DEEPSEEKNOVA_PROVIDER_MODEL`, `DEEPSEEKNOVA_MAX_STEPS`, etc.
 
 ### Full Configuration Reference
 
@@ -143,10 +143,10 @@ servers = [
 |---|---|
 | `OPENAI_API_KEY` | OpenAI API key |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
-| `DPRONIX_PROVIDER` | Override provider kind |
-| `DPRONIX_MODEL` | Override model name |
-| `DPRONIX_MAX_STEPS` | Override max steps |
-| `DPRONIX_LOG` | Log level (trace, debug, info, warn, error) |
+| `DEEPSEEKNOVA_PROVIDER` | Override provider kind |
+| `DEEPSEEKNOVA_MODEL` | Override model name |
+| `DEEPSEEKNOVA_MAX_STEPS` | Override max steps |
+| `DEEPSEEKNOVA_LOG` | Log level (trace, debug, info, warn, error) |
 
 ## Tools Reference
 

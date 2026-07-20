@@ -1,7 +1,7 @@
 //! # Context — Workspace indexing and working memory
 //!
 //! Builds and maintains the agent's contextual understanding of the
-//! workspace: file trees, project memory (DPRONIX.md), and session state.
+//! workspace: file trees, project memory (DEEPSEEKNOVA.md), and session state.
 
 pub mod history;
 
@@ -302,7 +302,7 @@ impl CacheAwarePromptBuilder {
             prefix_parts.push(format!("## Available Tools\n\n{tools_text}"));
         }
 
-        // 3. Project memory (DPRONIX.md — stable between config changes)
+        // 3. Project memory (DEEPSEEKNOVA.md — stable between config changes)
         if let Some(ref deepseeknova_md) = project_memory.deepseeknova_md {
             prefix_parts.push(format!("## Project Context\n\n{deepseeknova_md}"));
         }
@@ -733,9 +733,9 @@ impl ProjectMemory {
         }
     }
 
-    /// Load DPRONIX.md from the workspace root if present.
+    /// Load DEEPSEEKNOVA.md from the workspace root if present.
     pub fn load_deepseeknova_md(&mut self, root: &Path) {
-        let path = root.join("DPRONIX.md");
+        let path = root.join("DEEPSEEKNOVA.md");
         if path.exists() {
             if let Ok(content) = std::fs::read_to_string(&path) {
                 self.deepseeknova_md = Some(content);

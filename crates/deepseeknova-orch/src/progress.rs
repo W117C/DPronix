@@ -152,9 +152,11 @@ impl ProgressTracker {
         if let Some(action) = state.actions.get_mut(action_id) {
             action.status = ActionStatus::Completed;
             action.completed_at = Some(now_epoch());
-            action.output_summary = Some(
-                if output.len() > 200 { format!("{}…", &output[..200]) } else { output.to_string() },
-            );
+            action.output_summary = Some(if output.len() > 200 {
+                format!("{}…", &output[..200])
+            } else {
+                output.to_string()
+            });
         }
     }
 
@@ -179,7 +181,10 @@ impl ProgressTracker {
     /// Mark the entire orchestration as completed.
     pub fn finish(&self) {
         let mut state = self.inner.write().unwrap_or_else(|e| e.into_inner());
-        let has_failures = state.actions.values().any(|a| matches!(a.status, ActionStatus::Failed(_)));
+        let has_failures = state
+            .actions
+            .values()
+            .any(|a| matches!(a.status, ActionStatus::Failed(_)));
         state.status = if has_failures {
             OrchStatus::Failed("some actions failed".into())
         } else {
@@ -200,7 +205,10 @@ impl ProgressTracker {
     /// Generate a progress report for the frontend.
     pub fn report(&self) -> OrchProgressReport {
         let state = self.inner.read().unwrap_or_else(|e| e.into_inner());
-        let elapsed = state.start_time.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0);
+        let elapsed = state
+            .start_time
+            .map(|s| s.elapsed().as_secs_f64())
+            .unwrap_or(0.0);
 
         let actions: Vec<ActionProgress> = state
             .action_order
@@ -208,9 +216,18 @@ impl ProgressTracker {
             .filter_map(|id| state.actions.get(id).cloned())
             .collect();
 
-        let completed = actions.iter().filter(|a| a.status == ActionStatus::Completed).count();
-        let failed = actions.iter().filter(|a| matches!(a.status, ActionStatus::Failed(_))).count();
-        let in_progress = actions.iter().filter(|a| a.status == ActionStatus::InProgress).count();
+        let completed = actions
+            .iter()
+            .filter(|a| a.status == ActionStatus::Completed)
+            .count();
+        let failed = actions
+            .iter()
+            .filter(|a| matches!(a.status, ActionStatus::Failed(_)))
+            .count();
+        let in_progress = actions
+            .iter()
+            .filter(|a| a.status == ActionStatus::InProgress)
+            .count();
 
         OrchProgressReport {
             status: state.status.clone(),
@@ -256,19 +273,35 @@ mod tests {
         // Register a plan
         let plan = Plan {
             id: "p1".into(),
-            goal: Goal { description: "Build a REST API".into(), constraints: vec![], criteria: vec![] },
+            goal: Goal {
+                description: "Build a REST API".into(),
+                constraints: vec![],
+                criteria: vec![],
+            },
             actions: vec![
                 Action {
-                    id: "a1".into(), name: "create_schema".into(),
-                    description: "Create DB schema".into(), preconditions: vec![],
-                    effects: vec![], cost: 1.0, tool: None, tool_args: None,
-                    delegatable: true, status: ActionStatus::Pending,
+                    id: "a1".into(),
+                    name: "create_schema".into(),
+                    description: "Create DB schema".into(),
+                    preconditions: vec![],
+                    effects: vec![],
+                    cost: 1.0,
+                    tool: None,
+                    tool_args: None,
+                    delegatable: true,
+                    status: ActionStatus::Pending,
                 },
                 Action {
-                    id: "a2".into(), name: "write_tests".into(),
-                    description: "Write integration tests".into(), preconditions: vec![],
-                    effects: vec![], cost: 2.0, tool: None, tool_args: None,
-                    delegatable: true, status: ActionStatus::Pending,
+                    id: "a2".into(),
+                    name: "write_tests".into(),
+                    description: "Write integration tests".into(),
+                    preconditions: vec![],
+                    effects: vec![],
+                    cost: 2.0,
+                    tool: None,
+                    tool_args: None,
+                    delegatable: true,
+                    status: ActionStatus::Pending,
                 },
             ],
             dependencies: HashMap::new(),
@@ -310,12 +343,22 @@ mod tests {
 
         let plan = Plan {
             id: "p1".into(),
-            goal: Goal { description: "test".into(), constraints: vec![], criteria: vec![] },
+            goal: Goal {
+                description: "test".into(),
+                constraints: vec![],
+                criteria: vec![],
+            },
             actions: vec![Action {
-                id: "a1".into(), name: "flaky".into(),
-                description: "Flaky action".into(), preconditions: vec![],
-                effects: vec![], cost: 1.0, tool: None, tool_args: None,
-                delegatable: true, status: ActionStatus::Pending,
+                id: "a1".into(),
+                name: "flaky".into(),
+                description: "Flaky action".into(),
+                preconditions: vec![],
+                effects: vec![],
+                cost: 1.0,
+                tool: None,
+                tool_args: None,
+                delegatable: true,
+                status: ActionStatus::Pending,
             }],
             dependencies: HashMap::new(),
             status: PlanStatus::Draft,

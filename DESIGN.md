@@ -4,7 +4,7 @@
 
 DeepseekNova 是一个 Rust 编写的 AI Agent 框架，包含 21 个 crate。
 
-> **历史备注**：本项目从早期名称（DPronix）重命名为 DeepseekNova，重命名工作已全部完成。
+> **历史备注**：本项目从早期名称（DPronix）重命名为 DeepseekNova，重命名工作已全部完成。旧的 `.dpronix/` 目录已迁移至 `.deepseeknova/`，环境变量前缀从 `DPRONIX_` 统一为 `DEEPSEEKNOVA_`。
 
 ### Crate 结构
 

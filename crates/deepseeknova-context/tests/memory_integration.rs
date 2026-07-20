@@ -85,7 +85,7 @@ fn working_memory_pin_is_stored() {
 #[test]
 fn project_memory_loads_deepseeknova_md() {
     let dir = TempDir::new().unwrap();
-    std::fs::write(dir.path().join("DPRONIX.md"), "# Project Context").unwrap();
+    std::fs::write(dir.path().join("DEEPSEEKNOVA.md"), "# Project Context").unwrap();
 
     let mut pm = ProjectMemory::new();
     pm.load_deepseeknova_md(dir.path());
@@ -128,7 +128,11 @@ fn prompt_builder_basic_output() {
 #[test]
 fn prompt_builder_injects_project_memory() {
     let dir = TempDir::new().unwrap();
-    std::fs::write(dir.path().join("DPRONIX.md"), "# My Project\nVersion 2.0").unwrap();
+    std::fs::write(
+        dir.path().join("DEEPSEEKNOVA.md"),
+        "# My Project\nVersion 2.0",
+    )
+    .unwrap();
     let mut pm = ProjectMemory::new();
     pm.load_deepseeknova_md(dir.path());
 

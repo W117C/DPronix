@@ -24,7 +24,11 @@ pub async fn get_wiki_pages() -> Result<serde_json::Value, String> {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map(|e| e == "md" || e == "toml").unwrap_or(false) {
+                if path
+                    .extension()
+                    .map(|e| e == "md" || e == "toml")
+                    .unwrap_or(false)
+                {
                     let name = path
                         .file_stem()
                         .map(|s| s.to_string_lossy().to_string())

@@ -4,7 +4,7 @@
 //!   1. Hard-coded defaults
 //!   2. `~/.deepseeknova/config.toml`  (user)
 //!   3. `./deepseeknova.toml`          (project)
-//!   4. Environment variables       (DPRONIX_*)
+//!   4. Environment variables       (DEEPSEEKNOVA_*)
 //!   5. CLI flags                   (applied by caller)
 
 use anyhow::Context;
@@ -488,12 +488,12 @@ impl Config {
         self.security.merge(other.security);
     }
 
-    /// Apply DPRONIX_* environment variable overrides.
+    /// Apply DEEPSEEKNOVA_* environment variable overrides.
     fn apply_env_overrides(&mut self) {
-        if let Ok(val) = std::env::var("DPRONIX_MODEL") {
+        if let Ok(val) = std::env::var("DEEPSEEKNOVA_MODEL") {
             self.default_model = Some(val);
         }
-        if let Ok(val) = std::env::var("DPRONIX_MAX_STEPS") {
+        if let Ok(val) = std::env::var("DEEPSEEKNOVA_MAX_STEPS") {
             if let Ok(n) = val.parse() {
                 self.default_max_steps = Some(n);
             }

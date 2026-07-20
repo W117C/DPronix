@@ -12,7 +12,7 @@
 use std::path::Path;
 
 fn main() -> anyhow::Result<()> {
-    println!("═══ DPRonix Quickstart ═══\n");
+    println!("═══ DeepseekNova Quickstart ═══\n");
 
     // ── 1. 安全路径解析 ──────────────────────────────────────────
     println!("▸ 1. Security — path resolution");

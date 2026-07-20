@@ -78,10 +78,10 @@ All notable changes to DeepseekNova will be documented in this file.
 ### 安全与隐私修复
 
 #### 数据泄露清理
-- `git rm --cached` 移除被意外追踪的 4 个 `.dpronix/` 运行时状态文件
+- `git rm --cached` 移除被意外追踪的 4 个 `.deepseeknova/` 运行时状态文件
 - 使用 `git filter-repo` 从全部 Git 历史中彻底清除上述文件（仅 `rm --cached` 不影响历史）
 - 删除 `dpronix.toml`（旧项目名残留配置）
-- `.gitignore` 规则已覆盖 `.dpronix/*`（仅保留 `.dpronix/skills/`）
+- `.gitignore` 规则已覆盖 `.deepseeknova/*`（仅保留 `.deepseeknova/skills/`）
 
 #### 本机路径泄露
 - `AGENTS.md` 移除硬编码路径 `/Users/ze/.reasonix/...`（暴露本机用户名和环境结构）

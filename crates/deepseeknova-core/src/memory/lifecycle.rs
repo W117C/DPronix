@@ -129,7 +129,11 @@ impl LifecycleMeta {
         // Decay factor: recently recalled memories decay slower
         let recency_bonus = if let Some(last) = self.last_recalled_at {
             let days_since = (Utc::now().timestamp() - last) as f32 / 86_400.0;
-            if days_since < 7.0 { 0.5 } else { 1.0 }
+            if days_since < 7.0 {
+                0.5
+            } else {
+                1.0
+            }
         } else {
             1.0
         };
@@ -245,8 +249,14 @@ mod tests {
 
     #[test]
     fn test_stage_priority_ordering() {
-        assert!(MemoryLifecycleStage::Permanent.priority() > MemoryLifecycleStage::Verified.priority());
-        assert!(MemoryLifecycleStage::Verified.priority() > MemoryLifecycleStage::Candidate.priority());
-        assert!(MemoryLifecycleStage::Candidate.priority() > MemoryLifecycleStage::Archived.priority());
+        assert!(
+            MemoryLifecycleStage::Permanent.priority() > MemoryLifecycleStage::Verified.priority()
+        );
+        assert!(
+            MemoryLifecycleStage::Verified.priority() > MemoryLifecycleStage::Candidate.priority()
+        );
+        assert!(
+            MemoryLifecycleStage::Candidate.priority() > MemoryLifecycleStage::Archived.priority()
+        );
     }
 }

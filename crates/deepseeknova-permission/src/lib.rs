@@ -316,7 +316,7 @@ fn is_dangerous_command(cmd: &str) -> bool {
         "rm -rf /*",
         "mkfs",
         "dd if=",
-        ":(){ :|:& };:",  // fork bomb
+        ":(){ :|:& };:", // fork bomb
         "chmod -r 777 /",
         "> /dev/sda",
         "shutdown",
